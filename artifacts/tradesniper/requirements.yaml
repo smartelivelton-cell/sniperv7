@@ -1,0 +1,18 @@
+packages:
+  "framer-motion": "For premium smooth animations and layout transitions"
+  "clsx": "Utility for constructing className strings conditionally"
+  "tailwind-merge": "Utility function to efficiently merge Tailwind CSS classes"
+  "date-fns": "For formatting trade history dates"
+
+images:
+  - path: "artifacts/tradesniper/public/images/bg-texture.png"
+    description: "Subtle dark industrial noise texture, very low opacity, almost black"
+    aspect_ratio: "16:9"
+  - path: "artifacts/tradesniper/public/images/ai-avatar.png"
+    description: "Futuristic minimal glowing yellow eye or core, representing an AI sniper bot, dark background"
+    aspect_ratio: "1:1"
+
+notes:
+  - Uses native WebSocket for Binance streams
+  - Uses raw fetch for Anthropic SSE streaming
+  - All styling utilizes CSS variables defined in index.css for strict dark industrial theme

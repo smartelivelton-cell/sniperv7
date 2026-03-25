@@ -1,0 +1,57 @@
+O Gemini disse
+Para o Replit Agent, o segredo não é apenas dar as regras de trade, mas dar as instruções de engenharia para ele construir a estrutura do código (frontend e backend) que suporte essas regras.
+
+Abaixo está o Prompt Consolidado e Final para você colar no Replit. Ele junta a identidade visual, a lógica de visão (upload de 5 imagens), a calculadora de banca e os Widgets do TradingView.
+
+🚀 PROMPT DE ENGENHARIA: TradeSniper AI PRO (Versão Full-Stack Replit)
+Crie um Web App Full-Stack de elite para Scalping de Criptoativos com as seguintes especificações técnicas:
+
+1. IDENTIDADE VISUAL E INTERFACE (UI/UX)
+Estilo: Dark Mode Industrial. Fundo #080808, detalhes em Amarelo Binance #F3BA2F, textos de lucro em Verde Neon e alertas em Vermelho.
+
+Header: Marquee (letreiro) dinâmico com preços em tempo real via WebSocket (Binance API) para: BTC, ETH, SOL, XRP, DOGE, QTUM e AVAX.
+
+Dashboard de Gráficos: Integre Widgets do TradingView (Advanced Real-Time Chart) para as mesmas moedas acima, configurados para o timeframe M15 por padrão.
+
+2. MÓDULO DE INTELIGÊNCIA E VISÃO (O MOTOR)
+Multi-Upload: Implemente um sistema que aceite até 5 prints simultâneos. A IA deve rotular internamente como D1, H4, H1, M15 e M5.
+
+Processamento de Visão: Use modelos de Vision (GPT-4o ou similar) para ler:
+
+Preço na régua direita do print.
+
+Posição das médias EMA 9 e 21.
+
+Nível do RSI e padrões de candle (Engolfo, Martelo, Rejeição).
+
+Regra de Sincronia: O "Preço de Entrada" sugerido NUNCA pode estar a mais de 0.5% de distância do preço atual do WebSocket. Se houver divergência, exibir: "ERRO DE SINCRONIA - ATUALIZE".
+
+3. CALCULADORA SNIPER E GESTÃO DE BANCA
+Configuração de Banca: Campo editável para Saldo (Padrão: 187.50 USDT).
+
+Meta de Liberdade: Campo para Meta Diária (Padrão: 100 - 250 USD).
+
+Lógica de Lote (Size): O app deve calcular o Size (Volume) necessário para que 1% de movimento atinja a meta, subtraindo automaticamente 0.1% de taxas (Taker).
+
+Alerta de Risco: Exibir a Alavancagem necessária e a Distância de Liquidação. Se a liquidação estiver a menos de 2% do preço de entrada, exibir aviso: "ALAVANCAGEM SUICIDA - REDUZA O SIZE".
+
+4. ESTRATÉGIA DE EXECUÇÃO (SMC + PRICE ACTION)
+Hierarquia de Decisão: Analisar D1/H4 para tendência macro. Só liberar sinal "FORTE" se M15/M5 estiverem alinhados com a tendência maior.
+
+Filtro de Médias: Preço > Média 200 (1H)? Bloquear botões de SHORT. Preço < Média 200? Bloquear LONG.
+
+O Gatilho Sniper: O veredito deve ser exato: "Aguarde fechamento de Candle de Força (Corpo Cheio) em [Preço] para disparar a ordem".
+
+5. COPILOTO IA (CHAT AO VIVO)
+Sidebar de Chat: Um chatbot que mantém o contexto do setup analisado.
+
+Botões de Resposta Rápida: "Pavio de rejeição - cancelo?", "Proteger no 0x0 agora?", "Volume confirmou?".
+
+Histórico: Salvar o PNL de cada trade em um banco de dados local (SQLite) para mostrar o progresso da meta diária em uma barra de porcentagem.
+
+💡 Instruções Adicionais para o Replit Agent:
+"Use React para o frontend e FastAPI/Python ou Node.js para o backend."
+
+"Para a leitura de imagens, utilize a API da OpenAI (GPT-4o-vision) ou Anthropic (Claude 3.5 Sonnet)."
+
+"Mantenha o código modularizado para facilitar correções de bugs de alucinação de preço."
