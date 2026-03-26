@@ -7,8 +7,8 @@ export interface TickerData {
   isUp: boolean;
 }
 
-const SYMBOLS = ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'XRPUSDT', 'DOGEUSDT', 'QTUMUSDT', 'AVAXUSDT'];
-const STREAM_URL = `wss://stream.binance.com/stream?streams=${SYMBOLS.map(s => s.toLowerCase() + '@ticker').join('/')}`;
+const SYMBOLS = ['BTC-USDT-SWAP', 'ETH-USDT-SWAP', 'SOL-USDT-SWAP', 'DOGE-USDT-SWAP', 'AVAX-USDT-SWAP'];
+const OKX_WS_URL = 'wss://ws.okx.com:8443/ws/v5/public';
 
 export function useBinanceTicker() {
   const [tickers, setTickers] = useState<Record<string, TickerData>>({});
@@ -21,51 +21,47 @@ export function useBinanceTicker() {
 
     const connect = () => {
       if (wsRef.current?.readyState === WebSocket.OPEN) return;
-      
-      const ws = new WebSocket(STREAM_URL);
+
+      const ws = new WebSocket(OKX_WS_URL);
       wsRef.current = ws;
 
       ws.onopen = () => {
-        if (isMounted) setIsConnected(true);
+        if (!isMounted) return;
+        setIsConnected(true);
+        ws.send(JSON.stringify({
+          op: 'subscribe',
+          args: SYMBOLS.map(instId => ({ channel: 'tickers', instId })),
+        }));
       };
 
       ws.onmessage = (event) => {
         if (!isMounted) return;
         try {
-          const message = JSON.parse(event.data);
-          if (message.data) {
-            const data = message.data;
-            const symbol = data.s.replace('USDT', '');
-            const price = parseFloat(data.c);
-            const changePercent = parseFloat(data.P);
-            
+          const msg = JSON.parse(event.data);
+          if (msg.arg?.channel === 'tickers' && msg.data?.[0]) {
+            const d = msg.data[0];
+            const instId: string = d.instId;
+            const base = instId.replace('-USDT-SWAP', '');
+            const price = parseFloat(d.last);
+            const open24h = parseFloat(d.open24h);
+            const changePercent = open24h ? ((price - open24h) / open24h) * 100 : 0;
+
             setTickers(prev => ({
               ...prev,
-              [symbol]: {
-                symbol,
-                price,
-                changePercent,
-                isUp: changePercent >= 0
-              }
+              [base]: { symbol: base, price, changePercent, isUp: changePercent >= 0 },
             }));
           }
-        } catch (error) {
-          console.error("Failed to parse ticker data", error);
-        }
+        } catch (_) {}
       };
 
       ws.onclose = () => {
         if (isMounted) {
           setIsConnected(false);
-          // Reconnect logic
           reconnectTimeout = window.setTimeout(connect, 3000);
         }
       };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error", error);
-        ws.close();
-      };
+      ws.onerror = () => ws.close();
     };
 
     connect();
@@ -73,9 +69,7 @@ export function useBinanceTicker() {
     return () => {
       isMounted = false;
       clearTimeout(reconnectTimeout);
-      if (wsRef.current) {
-        wsRef.current.close();
-      }
+      wsRef.current?.close();
     };
   }, []);
 

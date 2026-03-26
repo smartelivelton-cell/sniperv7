@@ -13,7 +13,7 @@ import type { AnalysisResult } from '@workspace/api-client-react/src/generated/a
 import { useCreateTrade } from '@workspace/api-client-react';
 import { LayoutDashboard, Eye, Calculator, Bot, Radar } from 'lucide-react';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'QTUM', 'AVAX'];
+const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'ZEC', 'OP', 'QTUM', 'AXS', 'AVAX'];
 
 const TABS = [
   { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
@@ -64,7 +64,6 @@ export default function Terminal() {
     <div className="flex flex-col h-screen max-h-screen bg-background text-foreground overflow-hidden">
       <Header />
 
-      {/* Tab Navigation Bar */}
       <nav className="flex bg-card/80 border-b border-border shrink-0 px-2">
         {TABS.map(tab => {
           const Icon = tab.icon;
@@ -85,6 +84,9 @@ export default function Terminal() {
               {tab.id === 'vision' && aiResult && (
                 <span className="ml-1 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
               )}
+              {tab.id === 'scanner' && (
+                <span className="ml-1 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              )}
             </button>
           );
         })}
@@ -92,10 +94,8 @@ export default function Terminal() {
 
       {/* ── ABA 1: CENTRAL DE COMANDO ── */}
       <div className={cn("flex-1 flex flex-col overflow-hidden", activeTab !== 'command' && "hidden")}>
-        {/* Charts — fill all remaining space */}
         <div className="flex-1 flex flex-col overflow-hidden p-2 pb-1">
           <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card relative">
-            {/* Symbol tabs */}
             <div className="flex bg-secondary/50 border-b border-border px-2 gap-1 overflow-x-auto shrink-0">
               {SYMBOLS.map(s => (
                 <button
@@ -108,18 +108,16 @@ export default function Terminal() {
                       : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
                   )}
                 >
-                  {s}USDT
+                  {s}-USDT-SWAP
                 </button>
               ))}
             </div>
-            {/* Chart widget fills all remaining height */}
             <div className="flex-1 bg-black min-h-0">
               <TradingViewWidget key={`${activeSymbol}-${chartKey}`} symbol={activeSymbol} />
             </div>
           </div>
         </div>
 
-        {/* Trade History — collapsible strip */}
         <div className="shrink-0 px-2 pb-2 z-10">
           <button
             onClick={() => setHistoryOpen(o => !o)}
