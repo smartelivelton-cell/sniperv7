@@ -3,7 +3,7 @@ import { GlassCard } from '../ui/PremiumComponents';
 import { cn } from '@/lib/utils';
 import { calculateEMA, calculateATR, parseOKXCandles, calcSlTp, type Candle } from '@/lib/ema';
 
-const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'ZEC', 'CHR', 'ICX', 'OP', 'QTUM', 'AXS', 'AVAX'];
+const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'ZEC', 'ICX', 'OP', 'QTUM', 'AXS', 'AVAX'];
 const SCAN_INTERVAL_MS = 30_000;
 
 interface SignalAlert {
