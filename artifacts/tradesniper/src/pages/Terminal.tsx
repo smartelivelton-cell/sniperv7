@@ -4,19 +4,31 @@ import { TradingViewWidget } from '@/components/charts/TradingViewWidget';
 import { ImageUploader } from '@/components/analysis/ImageUploader';
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel';
 import { SniperCalculator } from '@/components/calculator/SniperCalculator';
+import { GoalsTracker } from '@/components/calculator/GoalsTracker';
 import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
 import { cn } from '@/lib/utils';
 import type { AnalysisResult } from '@workspace/api-client-react/src/generated/api.schemas';
 import { useCreateTrade } from '@workspace/api-client-react';
+import { LayoutDashboard, Eye, Calculator, Bot } from 'lucide-react';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'QTUM', 'AVAX'];
 
+const TABS = [
+  { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
+  { id: 'vision', label: 'Visão IA', icon: Eye },
+  { id: 'calculator', label: 'Calculadora & Metas', icon: Calculator },
+  { id: 'copilot', label: 'Copiloto Chat', icon: Bot },
+] as const;
+
+type TabId = typeof TABS[number]['id'];
+
 export default function Terminal() {
+  const [activeTab, setActiveTab] = useState<TabId>('command');
   const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[0]);
   const [aiResult, setAiResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
+
   const createTradeMutation = useCreateTrade();
 
   const handleAnalysisStart = () => {
@@ -32,97 +44,130 @@ export default function Terminal() {
   const handleAnalysisError = (err: Error) => {
     setIsAnalyzing(false);
     console.error(err);
-    // Could add toast here
   };
 
   const handleExecuteTrade = async (tradeData: any) => {
-    // In a real app, this would execute via exchange API, then record.
-    // For this prototype, we record it directly as PENDING/OPEN.
     await createTradeMutation.mutateAsync({ data: tradeData });
   };
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-background text-foreground overflow-hidden">
       <Header />
-      
-      <main className="flex-1 flex overflow-hidden p-2 gap-2 relative">
-        {/* Background texture from requirements.yaml */}
-        <div 
-          className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay" 
-          style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/bg-texture.png)`, backgroundSize: 'cover' }}
-        />
 
-        {/* LEFT COLUMN (Charts & Analysis) - 65% width */}
-        <div className="w-[65%] flex flex-col gap-2 min-w-[600px] z-10 relative">
-          
-          {/* Chart Section */}
-          <div className="h-[55%] flex flex-col rounded-xl overflow-hidden border border-border bg-card">
-            {/* Tabs */}
-            <div className="flex bg-secondary/50 border-b border-border px-2 pt-2 gap-1 overflow-x-auto custom-scrollbar shrink-0">
-              {SYMBOLS.map(s => (
-                <button
-                  key={s}
-                  onClick={() => setActiveSymbol(s)}
-                  className={cn(
-                    "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0",
-                    activeSymbol === s 
-                      ? "bg-card text-primary border-border" 
-                      : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
-                  )}
-                >
-                  {s}USDT
-                </button>
-              ))}
-            </div>
-            {/* Widget */}
-            <div className="flex-1 bg-black">
-              {/* Force remount of iframe on symbol change to ensure clean load if needed, 
-                  but TradingView handles symbol change internally via prop if properly configured. 
-                  Given the iframe src approach, remounting is safer to ensure symbol sync. */}
-              <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
-            </div>
-          </div>
+      {/* Tab Navigation Bar */}
+      <nav className="flex bg-card/80 border-b border-border shrink-0 px-2">
+        {TABS.map(tab => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap",
+                isActive
+                  ? "border-primary text-primary bg-primary/5"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40"
+              )}
+            >
+              <Icon className="w-4 h-4" />
+              {tab.label}
+              {tab.id === 'vision' && aiResult && (
+                <span className="ml-1 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+              )}
+            </button>
+          );
+        })}
+      </nav>
 
-          {/* Analysis Section Split */}
-          <div className="flex-1 flex gap-2 h-[45%]">
-            <div className="w-1/2 overflow-y-auto custom-scrollbar rounded-xl">
-              <ImageUploader 
-                symbol={activeSymbol}
-                currentPrice={0} // Ideally passed from ticker context
-                balance={187.50} 
-                dailyGoal={175}
-                onAnalysisStart={handleAnalysisStart}
-                onAnalysisComplete={handleAnalysisComplete}
-                onAnalysisError={handleAnalysisError}
-              />
+      {/* ── ABA 1: CENTRAL DE COMANDO ── */}
+      {activeTab === 'command' && (
+        <div className="flex-1 flex flex-col overflow-hidden">
+          <main className="flex-1 flex overflow-hidden p-2 gap-2 relative">
+            <div
+              className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay"
+              style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/bg-texture.png)`, backgroundSize: 'cover' }}
+            />
+
+            {/* Charts — full width on this tab */}
+            <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card z-10 relative">
+              <div className="flex bg-secondary/50 border-b border-border px-2 pt-2 gap-1 overflow-x-auto shrink-0">
+                {SYMBOLS.map(s => (
+                  <button
+                    key={s}
+                    onClick={() => setActiveSymbol(s)}
+                    className={cn(
+                      "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0",
+                      activeSymbol === s
+                        ? "bg-card text-primary border-border"
+                        : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
+                    )}
+                  >
+                    {s}USDT
+                  </button>
+                ))}
+              </div>
+              <div className="flex-1 bg-black">
+                <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
+              </div>
             </div>
-            <div className="w-1/2">
-              <AnalysisResultPanel result={aiResult} isLoading={isAnalyzing} />
-            </div>
+          </main>
+
+          {/* Trade History */}
+          <div className="h-[220px] shrink-0 p-2 pt-0 z-10 relative">
+            <TradeHistory dailyGoal={175} />
           </div>
         </div>
+      )}
 
-        {/* RIGHT COLUMN (Calculator & Copilot) - 35% width */}
-        <div className="w-[35%] flex flex-col gap-2 min-w-[350px] z-10">
-          <div className="h-auto shrink-0">
-            <SniperCalculator 
-              symbol={activeSymbol} 
+      {/* ── ABA 2: VISÃO IA ── */}
+      {activeTab === 'vision' && (
+        <div className="flex-1 flex overflow-hidden p-2 gap-2">
+          <div className="w-1/2 overflow-y-auto">
+            <ImageUploader
+              symbol={activeSymbol}
+              currentPrice={0}
+              balance={187.50}
+              dailyGoal={175}
+              onAnalysisStart={handleAnalysisStart}
+              onAnalysisComplete={(result) => {
+                handleAnalysisComplete(result);
+              }}
+              onAnalysisError={handleAnalysisError}
+            />
+          </div>
+          <div className="w-1/2 overflow-y-auto">
+            <AnalysisResultPanel result={aiResult} isLoading={isAnalyzing} />
+          </div>
+        </div>
+      )}
+
+      {/* ── ABA 3: CALCULADORA & METAS ── */}
+      {activeTab === 'calculator' && (
+        <div className="flex-1 flex overflow-hidden p-2 gap-2">
+          <div className="w-[45%] overflow-y-auto">
+            <SniperCalculator
+              symbol={activeSymbol}
               onSymbolChange={setActiveSymbol}
               symbols={SYMBOLS}
               aiResult={aiResult}
               onExecuteTrade={handleExecuteTrade}
             />
           </div>
-          <div className="flex-1 min-h-0">
+          <div className="w-[55%] overflow-y-auto">
+            <GoalsTracker />
+          </div>
+        </div>
+      )}
+
+      {/* ── ABA 4: COPILOTO CHAT ── */}
+      {activeTab === 'copilot' && (
+        <div className="flex-1 flex overflow-hidden p-2">
+          <div className="flex-1 max-w-3xl mx-auto">
             <CopilotSidebar lastAnalysis={aiResult} />
           </div>
         </div>
-      </main>
-
-      {/* BOTTOM FOOTER / TRADE HISTORY */}
-      <div className="h-[250px] shrink-0 p-2 pt-0 z-10 relative">
-        <TradeHistory dailyGoal={175} />
-      </div>
+      )}
     </div>
   );
 }
