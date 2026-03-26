@@ -82,101 +82,93 @@ export default function Terminal() {
       </nav>
 
       {/* ── ABA 1: CENTRAL DE COMANDO ── */}
-      {activeTab === 'command' && (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Charts — fill all remaining space */}
-          <div className="flex-1 flex flex-col overflow-hidden p-2 pb-1 gap-0">
-            <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card relative">
-              {/* Symbol tabs */}
-              <div className="flex bg-secondary/50 border-b border-border px-2 gap-1 overflow-x-auto shrink-0">
-                {SYMBOLS.map(s => (
-                  <button
-                    key={s}
-                    onClick={() => setActiveSymbol(s)}
-                    className={cn(
-                      "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0 shrink-0",
-                      activeSymbol === s
-                        ? "bg-card text-primary border-border"
-                        : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
-                    )}
-                  >
-                    {s}USDT
-                  </button>
-                ))}
-              </div>
-              {/* Chart widget fills all remaining height */}
-              <div className="flex-1 bg-black min-h-0">
-                <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
-              </div>
+      <div className={cn("flex-1 flex flex-col overflow-hidden", activeTab !== 'command' && "hidden")}>
+        {/* Charts — fill all remaining space */}
+        <div className="flex-1 flex flex-col overflow-hidden p-2 pb-1">
+          <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card relative">
+            {/* Symbol tabs */}
+            <div className="flex bg-secondary/50 border-b border-border px-2 gap-1 overflow-x-auto shrink-0">
+              {SYMBOLS.map(s => (
+                <button
+                  key={s}
+                  onClick={() => setActiveSymbol(s)}
+                  className={cn(
+                    "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0 shrink-0",
+                    activeSymbol === s
+                      ? "bg-card text-primary border-border"
+                      : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
+                  )}
+                >
+                  {s}USDT
+                </button>
+              ))}
+            </div>
+            {/* Chart widget fills all remaining height */}
+            <div className="flex-1 bg-black min-h-0">
+              <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
             </div>
           </div>
-
-          {/* Trade History — collapsible strip */}
-          <div className="shrink-0 px-2 pb-2 z-10">
-            <button
-              onClick={() => setHistoryOpen(o => !o)}
-              className="w-full flex items-center justify-between px-4 py-2 bg-card border border-border rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
-            >
-              <span>📋 HISTÓRICO DO DIA</span>
-              <span>{historyOpen ? '▲ Fechar' : '▼ Expandir'}</span>
-            </button>
-            {historyOpen && (
-              <div className="mt-1 max-h-[200px] overflow-y-auto">
-                <TradeHistory dailyGoal={175} />
-              </div>
-            )}
-          </div>
         </div>
-      )}
+
+        {/* Trade History — collapsible strip */}
+        <div className="shrink-0 px-2 pb-2 z-10">
+          <button
+            onClick={() => setHistoryOpen(o => !o)}
+            className="w-full flex items-center justify-between px-4 py-2 bg-card border border-border rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+          >
+            <span>📋 HISTÓRICO DO DIA</span>
+            <span>{historyOpen ? '▲ Fechar' : '▼ Expandir'}</span>
+          </button>
+          {historyOpen && (
+            <div className="mt-1 max-h-[200px] overflow-y-auto">
+              <TradeHistory dailyGoal={175} />
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* ── ABA 2: VISÃO IA ── */}
-      {activeTab === 'vision' && (
-        <div className="flex-1 flex overflow-hidden p-2 gap-2">
-          <div className="w-1/2 overflow-y-auto">
-            <ImageUploader
-              symbol={activeSymbol}
-              currentPrice={0}
-              balance={187.50}
-              dailyGoal={175}
-              onAnalysisStart={handleAnalysisStart}
-              onAnalysisComplete={(result) => {
-                handleAnalysisComplete(result);
-              }}
-              onAnalysisError={handleAnalysisError}
-            />
-          </div>
-          <div className="w-1/2 overflow-y-auto">
-            <AnalysisResultPanel result={aiResult} isLoading={isAnalyzing} />
-          </div>
+      <div className={cn("flex-1 flex overflow-hidden p-2 gap-2", activeTab !== 'vision' && "hidden")}>
+        <div className="w-1/2 overflow-y-auto">
+          <ImageUploader
+            symbol={activeSymbol}
+            currentPrice={0}
+            balance={187.50}
+            dailyGoal={175}
+            onAnalysisStart={handleAnalysisStart}
+            onAnalysisComplete={(result) => {
+              handleAnalysisComplete(result);
+            }}
+            onAnalysisError={handleAnalysisError}
+          />
         </div>
-      )}
+        <div className="w-1/2 overflow-y-auto">
+          <AnalysisResultPanel result={aiResult} isLoading={isAnalyzing} />
+        </div>
+      </div>
 
       {/* ── ABA 3: CALCULADORA & METAS ── */}
-      {activeTab === 'calculator' && (
-        <div className="flex-1 flex overflow-hidden p-2 gap-2">
-          <div className="w-[45%] overflow-y-auto">
-            <SniperCalculator
-              symbol={activeSymbol}
-              onSymbolChange={setActiveSymbol}
-              symbols={SYMBOLS}
-              aiResult={aiResult}
-              onExecuteTrade={handleExecuteTrade}
-            />
-          </div>
-          <div className="w-[55%] overflow-y-auto">
-            <GoalsTracker />
-          </div>
+      <div className={cn("flex-1 flex overflow-hidden p-2 gap-2", activeTab !== 'calculator' && "hidden")}>
+        <div className="w-[45%] overflow-y-auto">
+          <SniperCalculator
+            symbol={activeSymbol}
+            onSymbolChange={setActiveSymbol}
+            symbols={SYMBOLS}
+            aiResult={aiResult}
+            onExecuteTrade={handleExecuteTrade}
+          />
         </div>
-      )}
+        <div className="w-[55%] overflow-y-auto">
+          <GoalsTracker />
+        </div>
+      </div>
 
       {/* ── ABA 4: COPILOTO CHAT ── */}
-      {activeTab === 'copilot' && (
-        <div className="flex-1 flex overflow-hidden p-2">
-          <div className="flex-1 max-w-3xl mx-auto">
-            <CopilotSidebar lastAnalysis={aiResult} />
-          </div>
+      <div className={cn("flex-1 flex overflow-hidden p-2", activeTab !== 'copilot' && "hidden")}>
+        <div className="flex-1 max-w-3xl mx-auto">
+          <CopilotSidebar lastAnalysis={aiResult} />
         </div>
-      )}
+      </div>
     </div>
   );
 }
