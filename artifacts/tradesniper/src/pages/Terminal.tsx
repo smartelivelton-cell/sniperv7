@@ -28,6 +28,7 @@ export default function Terminal() {
   const [activeSymbol, setActiveSymbol] = useState(SYMBOLS[0]);
   const [aiResult, setAiResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const createTradeMutation = useCreateTrade();
 
@@ -83,21 +84,17 @@ export default function Terminal() {
       {/* ── ABA 1: CENTRAL DE COMANDO ── */}
       {activeTab === 'command' && (
         <div className="flex-1 flex flex-col overflow-hidden">
-          <main className="flex-1 flex overflow-hidden p-2 gap-2 relative">
-            <div
-              className="absolute inset-0 opacity-[0.03] pointer-events-none mix-blend-overlay"
-              style={{ backgroundImage: `url(${import.meta.env.BASE_URL}images/bg-texture.png)`, backgroundSize: 'cover' }}
-            />
-
-            {/* Charts — full width on this tab */}
-            <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card z-10 relative">
-              <div className="flex bg-secondary/50 border-b border-border px-2 pt-2 gap-1 overflow-x-auto shrink-0">
+          {/* Charts — fill all remaining space */}
+          <div className="flex-1 flex flex-col overflow-hidden p-2 pb-1 gap-0">
+            <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card relative">
+              {/* Symbol tabs */}
+              <div className="flex bg-secondary/50 border-b border-border px-2 gap-1 overflow-x-auto shrink-0">
                 {SYMBOLS.map(s => (
                   <button
                     key={s}
                     onClick={() => setActiveSymbol(s)}
                     className={cn(
-                      "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0",
+                      "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0 shrink-0",
                       activeSymbol === s
                         ? "bg-card text-primary border-border"
                         : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
@@ -107,15 +104,27 @@ export default function Terminal() {
                   </button>
                 ))}
               </div>
-              <div className="flex-1 bg-black">
+              {/* Chart widget fills all remaining height */}
+              <div className="flex-1 bg-black min-h-0">
                 <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
               </div>
             </div>
-          </main>
+          </div>
 
-          {/* Trade History */}
-          <div className="h-[220px] shrink-0 p-2 pt-0 z-10 relative">
-            <TradeHistory dailyGoal={175} />
+          {/* Trade History — collapsible strip */}
+          <div className="shrink-0 px-2 pb-2 z-10">
+            <button
+              onClick={() => setHistoryOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-2 bg-card border border-border rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+            >
+              <span>📋 HISTÓRICO DO DIA</span>
+              <span>{historyOpen ? '▲ Fechar' : '▼ Expandir'}</span>
+            </button>
+            {historyOpen && (
+              <div className="mt-1 max-h-[200px] overflow-y-auto">
+                <TradeHistory dailyGoal={175} />
+              </div>
+            )}
           </div>
         </div>
       )}
