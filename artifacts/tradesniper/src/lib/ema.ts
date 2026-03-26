@@ -41,6 +41,17 @@ export function parseBinanceKlines(raw: any[][]): Candle[] {
   }));
 }
 
+export function parseOKXCandles(raw: any[]): Candle[] {
+  return raw.map((k) => ({
+    openTime: typeof k.openTime === "number" ? k.openTime : parseInt(k.openTime),
+    open: typeof k.open === "number" ? k.open : parseFloat(k.open),
+    high: typeof k.high === "number" ? k.high : parseFloat(k.high),
+    low: typeof k.low === "number" ? k.low : parseFloat(k.low),
+    close: typeof k.close === "number" ? k.close : parseFloat(k.close),
+    volume: typeof k.volume === "number" ? k.volume : parseFloat(k.volume),
+  }));
+}
+
 export function calcSlTp(entry: number, direction: 'LONG' | 'SHORT', atr: number) {
   const slDist = Math.max(atr * 1.2, entry * 0.003);
   const tpDist = slDist * 2;
