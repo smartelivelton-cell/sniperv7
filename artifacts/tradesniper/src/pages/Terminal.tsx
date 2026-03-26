@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { TradingViewWidget } from '@/components/charts/TradingViewWidget';
 import { ImageUploader } from '@/components/analysis/ImageUploader';
@@ -7,10 +7,11 @@ import { SniperCalculator } from '@/components/calculator/SniperCalculator';
 import { GoalsTracker } from '@/components/calculator/GoalsTracker';
 import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
+import { MonitorScanner } from '@/components/monitor/MonitorScanner';
 import { cn } from '@/lib/utils';
 import type { AnalysisResult } from '@workspace/api-client-react/src/generated/api.schemas';
 import { useCreateTrade } from '@workspace/api-client-react';
-import { LayoutDashboard, Eye, Calculator, Bot } from 'lucide-react';
+import { LayoutDashboard, Eye, Calculator, Bot, Radar } from 'lucide-react';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'XRP', 'DOGE', 'QTUM', 'AVAX'];
 
@@ -18,6 +19,7 @@ const TABS = [
   { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
   { id: 'vision', label: 'Visão IA', icon: Eye },
   { id: 'calculator', label: 'Calculadora & Metas', icon: Calculator },
+  { id: 'scanner', label: 'Scanner', icon: Radar },
   { id: 'copilot', label: 'Copiloto Chat', icon: Bot },
 ] as const;
 
@@ -29,6 +31,13 @@ export default function Terminal() {
   const [aiResult, setAiResult] = useState<AnalysisResult | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [chartKey, setChartKey] = useState(0);
+
+  useEffect(() => {
+    if (activeTab === 'command') {
+      setChartKey(k => k + 1);
+    }
+  }, [activeTab]);
 
   const createTradeMutation = useCreateTrade();
 
@@ -105,7 +114,7 @@ export default function Terminal() {
             </div>
             {/* Chart widget fills all remaining height */}
             <div className="flex-1 bg-black min-h-0">
-              <TradingViewWidget key={activeSymbol} symbol={activeSymbol} />
+              <TradingViewWidget key={`${activeSymbol}-${chartKey}`} symbol={activeSymbol} />
             </div>
           </div>
         </div>
@@ -163,7 +172,12 @@ export default function Terminal() {
         </div>
       </div>
 
-      {/* ── ABA 4: COPILOTO CHAT ── */}
+      {/* ── ABA 4: SCANNER ── */}
+      <div className={cn("flex-1 flex overflow-hidden", activeTab !== 'scanner' && "hidden")}>
+        <MonitorScanner />
+      </div>
+
+      {/* ── ABA 5: COPILOTO CHAT ── */}
       <div className={cn("flex-1 flex overflow-hidden p-2", activeTab !== 'copilot' && "hidden")}>
         <div className="flex-1 max-w-3xl mx-auto">
           <CopilotSidebar lastAnalysis={aiResult} />

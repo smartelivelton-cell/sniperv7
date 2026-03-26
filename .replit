@@ -24,3 +24,9 @@ expertMode = true
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 20000
+
+[userenv]
+
+[userenv.shared]
+BINANCE_API_KEY = "hOVWo9iJ8BcvbIZSNKwgnIyjHlna3xMrFBc5GA0keAx6VxBPaOBIPG7M3lJq4bbw"
+BINANCE_SECRET_KEY = "b9QKY3qthBwduBQjVgnnOhVaKdYttiR0QK0lIvFpFA8Ap38HAM7A8xjfcofAY87A"
