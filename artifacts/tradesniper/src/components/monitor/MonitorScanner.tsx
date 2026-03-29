@@ -14,6 +14,7 @@ import {
 
 const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 const SCAN_INTERVAL_MS = 30_000;
+const COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes anti-spam
 
 interface SignalAlert {
   id: string;
@@ -25,11 +26,19 @@ interface SignalAlert {
   tp2: number;
   tp3: number;
   strategy: string;
+  strategies: string[];
   leverage: number;
   rsi6: number;
   h4Trend: 'BULL' | 'BEAR' | 'NEUTRAL';
   reason: string;
   ts: number;
+}
+
+interface ActiveSignalState {
+  signal: SignalAlert;
+  tp1Hit: boolean;
+  tp2Hit: boolean;
+  tp3Hit: boolean;
 }
 
 interface CoinState {
@@ -46,22 +55,22 @@ interface CoinState {
   error: boolean;
 }
 
-function playBeep(direction: 'LONG' | 'SHORT') {
+function playBeep(direction: 'LONG' | 'SHORT', isMaster = false) {
   try {
     const ctx = new AudioContext();
-    const count = direction === 'LONG' ? 2 : 3;
+    const count = isMaster ? 4 : direction === 'LONG' ? 2 : 3;
     for (let i = 0; i < count; i++) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
-      osc.frequency.value = direction === 'LONG' ? 880 : 440;
+      osc.frequency.value = isMaster ? 1200 : direction === 'LONG' ? 880 : 440;
       osc.type = 'sine';
-      const t = ctx.currentTime + i * 0.25;
-      gain.gain.setValueAtTime(0.3, t);
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+      const t = ctx.currentTime + i * 0.2;
+      gain.gain.setValueAtTime(0.4, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
       osc.start(t);
-      osc.stop(t + 0.2);
+      osc.stop(t + 0.18);
     }
   } catch (_) {}
 }
@@ -91,10 +100,31 @@ async function sendTelegramAlert(signal: SignalAlert) {
         tp2: signal.tp2,
         tp3: signal.tp3,
         strategy: signal.strategy,
+        strategies: signal.strategies,
         leverage: signal.leverage,
         rsi6: signal.rsi6,
         h4Trend: signal.h4Trend,
         reason: signal.reason,
+      }),
+    });
+  } catch (_) {}
+}
+
+async function sendWinAlert(signal: SignalAlert, tpLevel: 1 | 2 | 3) {
+  try {
+    await fetch(`${BASE}/api/telegram/win`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        symbol: `${signal.symbol}-USDT-SWAP`,
+        side: signal.direction,
+        entry: signal.price,
+        tp1: signal.tp1,
+        tp2: signal.tp2,
+        tp3: signal.tp3,
+        tpLevel,
+        strategy: signal.strategy,
+        leverage: signal.leverage,
       }),
     });
   } catch (_) {}
@@ -112,6 +142,7 @@ const strategyEmoji: Record<string, string> = {
   'Onda SAR': '📡',
   'Fibonacci 50%': '📐',
   'Exaustão Sniper': '🎯',
+  'SINAL MESTRE': '🚀',
 };
 
 export function MonitorScanner() {
@@ -130,7 +161,10 @@ export function MonitorScanner() {
   const [activeAlert, setActiveAlert] = useState<SignalAlert | null>(null);
   const [lastScan, setLastScan] = useState<Date | null>(null);
   const [nextScanIn, setNextScanIn] = useState(0);
+
   const seenIds = useRef<Set<string>>(new Set());
+  const cooldownMap = useRef<Map<string, number>>(new Map());
+  const activeSignalsRef = useRef<Map<string, ActiveSignalState>>(new Map());
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const activatedRef = useRef(false);
@@ -191,57 +225,83 @@ export function MonitorScanner() {
         },
       }));
 
+      // ── MODULE 2: Check active signals for TP / SL hits ──────────────────────
+      for (const [sigId, entry] of activeSignalsRef.current) {
+        if (entry.signal.symbol !== symbol) continue;
+        const sig = entry.signal;
+        const isLong = sig.direction === 'LONG';
+
+        // SL hit — remove signal
+        if ((isLong && price <= sig.sl) || (!isLong && price >= sig.sl)) {
+          activeSignalsRef.current.delete(sigId);
+          continue;
+        }
+
+        // TP1
+        if (!entry.tp1Hit && ((isLong && price >= sig.tp1) || (!isLong && price <= sig.tp1))) {
+          entry.tp1Hit = true;
+          sendWinAlert(sig, 1);
+        }
+
+        // TP2 (requires TP1 already hit)
+        if (entry.tp1Hit && !entry.tp2Hit && ((isLong && price >= sig.tp2) || (!isLong && price <= sig.tp2))) {
+          entry.tp2Hit = true;
+          sendWinAlert(sig, 2);
+        }
+
+        // TP3 (requires TP2 already hit) — signal complete
+        if (entry.tp2Hit && !entry.tp3Hit && ((isLong && price >= sig.tp3) || (!isLong && price <= sig.tp3))) {
+          entry.tp3Hit = true;
+          sendWinAlert(sig, 3);
+          activeSignalsRef.current.delete(sigId);
+        }
+      }
+
       const bullGPS = trend === 'BULL' && h4Trend === 'BULL';
       const bearGPS = trend === 'BEAR' && h4Trend === 'BEAR';
-      const newSignals: SignalAlert[] = [];
-
-      const addSignal = (direction: 'LONG' | 'SHORT', strategy: string, leverage: number, reason: string) => {
-        const { sl, tp1, tp2, tp3 } = calcSlTp(price, direction, atr);
-        const id = `${symbol}-${strategy}-${direction}-${Math.floor(Date.now() / 60000)}`;
-        if (!seenIds.current.has(id)) {
-          seenIds.current.add(id);
-          newSignals.push({ id, symbol, direction, price, sl, tp1, tp2, tp3, strategy, leverage, rsi6: currRsi, h4Trend, reason, ts: Date.now() });
-        }
-      };
 
       const near200 = Math.abs(price - curr200) / curr200 < 0.002;
       const near9 = Math.abs(price - curr9) / curr9 < 0.001;
       const near21 = Math.abs(price - curr21) / curr21 < 0.001;
       const nearAnyEma = near200 || near9 || near21;
 
-      // ── Estratégia 1: Muralha & Suporte 200
+      // ── MODULE 1: Collect raw signals for this scan cycle ────────────────────
+      type RawSignal = { direction: 'LONG' | 'SHORT'; strategy: string; leverage: number; reason: string };
+      const rawSignals: RawSignal[] = [];
+
+      // Estratégia 1: Muralha & Suporte 200
       if (near200 && bullGPS && currRsi < 30) {
-        addSignal('LONG', 'Muralha 200', 50, `🏰 EMA200 como suporte institucional | RSI(6): ${currRsi.toFixed(0)}`);
+        rawSignals.push({ direction: 'LONG', strategy: 'Muralha 200', leverage: 50, reason: `🏰 EMA200 suporte institucional | RSI(6): ${currRsi.toFixed(0)}` });
       }
       if (near200 && bearGPS && currRsi > 70) {
-        addSignal('SHORT', 'Muralha 200', 50, `🏰 EMA200 como resistência institucional | RSI(6): ${currRsi.toFixed(0)}`);
+        rawSignals.push({ direction: 'SHORT', strategy: 'Muralha 200', leverage: 50, reason: `🏰 EMA200 resistência institucional | RSI(6): ${currRsi.toFixed(0)}` });
       }
 
-      // ── Estratégia 2: Surfe 200 (rompimento com volume)
+      // Estratégia 2: Surfe 200
       const crossedAbove200 = prevClose < prevEma200 && price > curr200;
       const crossedBelow200 = prevClose > prevEma200 && price < curr200;
       const lastCandle = candles15m[last];
       const bigVolume = lastCandle.volume > avgVol * 2;
 
       if (crossedAbove200 && bigVolume && h4Trend === 'BULL') {
-        addSignal('LONG', 'Surfe 200', 25, `🌊 Rompimento acima da EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x`);
+        rawSignals.push({ direction: 'LONG', strategy: 'Surfe 200', leverage: 25, reason: `🌊 Rompimento acima da EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x` });
       }
       if (crossedBelow200 && bigVolume && h4Trend === 'BEAR') {
-        addSignal('SHORT', 'Surfe 200', 25, `🌊 Rompimento abaixo da EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x`);
+        rawSignals.push({ direction: 'SHORT', strategy: 'Surfe 200', leverage: 25, reason: `🌊 Rompimento abaixo da EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x` });
       }
 
-      // ── Estratégia 3: Onda SAR Parabólico
+      // Estratégia 3: Onda SAR Parabólico
       const sarFlippedUp = prevSar && !prevSar.isLong && currSar?.isLong;
       const sarFlippedDown = prevSar && prevSar.isLong && !currSar?.isLong;
 
       if (sarFlippedUp && bullGPS) {
-        addSignal('LONG', 'Onda SAR', 25, '📡 SAR Parabólico virou para cima — nova onda de alta');
+        rawSignals.push({ direction: 'LONG', strategy: 'Onda SAR', leverage: 25, reason: '📡 SAR Parabólico virou para cima — nova onda de alta' });
       }
       if (sarFlippedDown && bearGPS) {
-        addSignal('SHORT', 'Onda SAR', 25, '📡 SAR Parabólico virou para baixo — nova onda de queda');
+        rawSignals.push({ direction: 'SHORT', strategy: 'Onda SAR', leverage: 25, reason: '📡 SAR Parabólico virou para baixo — nova onda de queda' });
       }
 
-      // ── Estratégia 4: Retração 50% Fibonacci
+      // Estratégia 4: Retração 50% Fibonacci
       const prevCandle = candles15m[prev];
       const isStrongCandle = prevCandle.volume > avgVol * 3;
       if (isStrongCandle) {
@@ -253,26 +313,60 @@ export function MonitorScanner() {
         const atFib50 = Math.abs(price - fib50) / fib50 < 0.0015;
 
         if (atFib50 && bullishPrev && bullGPS) {
-          addSignal('LONG', 'Fibonacci 50%', 25, `📐 Retração 50% após vela de força (${(prevCandle.volume / avgVol).toFixed(1)}x vol)`);
+          rawSignals.push({ direction: 'LONG', strategy: 'Fibonacci 50%', leverage: 25, reason: `📐 Retração 50% após vela de força (${(prevCandle.volume / avgVol).toFixed(1)}x vol)` });
         }
         if (atFib50 && !bullishPrev && bearGPS) {
-          addSignal('SHORT', 'Fibonacci 50%', 25, `📐 Retração 50% após vela de força (${(prevCandle.volume / avgVol).toFixed(1)}x vol)`);
+          rawSignals.push({ direction: 'SHORT', strategy: 'Fibonacci 50%', leverage: 25, reason: `📐 Retração 50% após vela de força (${(prevCandle.volume / avgVol).toFixed(1)}x vol)` });
         }
       }
 
-      // ── Estratégia 5: Exaustão Sniper RSI(6)
+      // Estratégia 5: Exaustão Sniper RSI(6)
       if (nearAnyEma && bullGPS && currRsi < 25) {
-        addSignal('LONG', 'Exaustão Sniper', 50, `🎯 RSI(6) em exaustão de venda: ${currRsi.toFixed(0)} — toque na média`);
+        rawSignals.push({ direction: 'LONG', strategy: 'Exaustão Sniper', leverage: 50, reason: `🎯 RSI(6) exaustão de venda: ${currRsi.toFixed(0)} — toque na média` });
       }
       if (nearAnyEma && bearGPS && currRsi > 75) {
-        addSignal('SHORT', 'Exaustão Sniper', 50, `🎯 RSI(6) em exaustão de compra: ${currRsi.toFixed(0)} — toque na média`);
+        rawSignals.push({ direction: 'SHORT', strategy: 'Exaustão Sniper', leverage: 50, reason: `🎯 RSI(6) exaustão de compra: ${currRsi.toFixed(0)} — toque na média` });
       }
 
-      if (newSignals.length > 0) {
-        setAlerts(prev_ => [...newSignals, ...prev_].slice(0, 50));
-        setActiveAlert(newSignals[0]);
-        playBeep(newSignals[0].direction);
-        for (const sig of newSignals) sendTelegramAlert(sig);
+      if (rawSignals.length === 0) return;
+
+      // ── MODULE 1: Apply 10-min cooldown per asset ────────────────────────────
+      const now = Date.now();
+      const lastAlert = cooldownMap.current.get(symbol) ?? 0;
+      if (now - lastAlert < COOLDOWN_MS) return;
+
+      // ── MODULE 1: Unify multi-strategy signals into SINAL MESTRE ────────────
+      const longRaws = rawSignals.filter(s => s.direction === 'LONG');
+      const shortRaws = rawSignals.filter(s => s.direction === 'SHORT');
+      const dominant = longRaws.length >= shortRaws.length && longRaws.length > 0 ? longRaws : shortRaws;
+      if (dominant.length === 0) return;
+
+      const direction = dominant[0].direction;
+      const strategies = dominant.map(s => s.strategy);
+      const isMaster = strategies.length > 1;
+      const strategy = isMaster ? 'SINAL MESTRE' : strategies[0];
+      const leverage = Math.max(...dominant.map(s => s.leverage));
+      const reason = dominant.map(s => s.reason).join(' | ');
+
+      const { sl, tp1, tp2, tp3 } = calcSlTp(price, direction, atr);
+      const id = `${symbol}-${direction}-${Math.floor(now / COOLDOWN_MS)}`;
+
+      if (!seenIds.current.has(id)) {
+        seenIds.current.add(id);
+        cooldownMap.current.set(symbol, now);
+
+        const sig: SignalAlert = {
+          id, symbol, direction, price, sl, tp1, tp2, tp3,
+          strategy, strategies, leverage, rsi6: currRsi, h4Trend, reason, ts: now,
+        };
+
+        // Register for TP tracking
+        activeSignalsRef.current.set(id, { signal: sig, tp1Hit: false, tp2Hit: false, tp3Hit: false });
+
+        setAlerts(prev_ => [sig, ...prev_].slice(0, 50));
+        setActiveAlert(sig);
+        playBeep(direction, isMaster);
+        sendTelegramAlert(sig);
       }
     } catch (_) {
       setCoins(prev_ => ({
@@ -316,16 +410,22 @@ export function MonitorScanner() {
         >
           <div
             className={cn(
-              "relative rounded-2xl border-2 p-8 min-w-[380px] text-center shadow-2xl",
+              "relative rounded-2xl border-2 p-8 min-w-[400px] max-w-[480px] text-center shadow-2xl",
               activeAlert.direction === 'LONG'
                 ? "border-green-400 bg-green-950/90 shadow-green-500/30"
                 : "border-red-400 bg-red-950/90 shadow-red-500/30"
             )}
             onClick={e => e.stopPropagation()}
           >
-            <div className="text-xs font-bold text-yellow-400 mb-1 tracking-widest">
-              {strategyEmoji[activeAlert.strategy] || '⚡'} {activeAlert.strategy.toUpperCase()}
-            </div>
+            {activeAlert.strategy === 'SINAL MESTRE' ? (
+              <div className="text-xs font-bold text-yellow-300 mb-1 tracking-widest animate-pulse">
+                🚀 SINAL MESTRE · {activeAlert.strategies.join(' + ')}
+              </div>
+            ) : (
+              <div className="text-xs font-bold text-yellow-400 mb-1 tracking-widest">
+                {strategyEmoji[activeAlert.strategy] || '⚡'} {activeAlert.strategy.toUpperCase()}
+              </div>
+            )}
             <div className={cn("text-5xl font-black mb-2", activeAlert.direction === 'LONG' ? "text-green-400" : "text-red-400")}>
               {activeAlert.direction === 'LONG' ? '▲ LONGA' : '▼ CURTA'}
             </div>
@@ -350,7 +450,30 @@ export function MonitorScanner() {
                 <div className="font-bold text-green-400">${fmt(activeAlert.tp3)}</div>
               </div>
             </div>
-            <div className="text-red-400 font-bold text-sm mb-3">🛡️ SL: ${fmt(activeAlert.sl)}</div>
+            <div className="text-red-400 font-bold text-sm mb-2">🛡️ SL: ${fmt(activeAlert.sl)}</div>
+
+            {/* Profit table based on $2,000 banca */}
+            {(() => {
+              const banca = 2000;
+              const tp1Pct = Math.abs((activeAlert.tp1 - activeAlert.price) / activeAlert.price) * 100;
+              const p10 = (banca * 10 * tp1Pct / 100).toFixed(0);
+              const p25 = (banca * 25 * tp1Pct / 100).toFixed(0);
+              const p50 = (banca * 50 * tp1Pct / 100).toFixed(0);
+              return (
+                <div className="bg-black/30 rounded-lg p-2 mb-3 text-xs text-left">
+                  <div className="text-yellow-400 font-bold mb-1">💰 Lucro no TP1 (Banca $2.000):</div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>10x → <span className="text-green-400 font-bold">+${p10}</span></span>
+                    <span>25x → <span className="text-green-400 font-bold">+${p25}</span></span>
+                    <span>50x → <span className="text-green-400 font-bold">+${p50}</span></span>
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-1">
+                    Caução segura: $800@25x | $400@50x (liq ≥ -10%)
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="text-xs text-muted-foreground mb-1">M15 · {activeAlert.reason}</div>
             <div className="text-xs text-yellow-400 font-bold mb-4">⚠️ Ao atingir TP1, mova o SL para o ponto de entrada!</div>
             <button
@@ -365,8 +488,8 @@ export function MonitorScanner() {
 
       <div className="flex items-center gap-3 shrink-0">
         <div className="flex-1">
-          <h2 className="text-sm font-black text-primary tracking-widest">CRYPTOSNIPER PRO · OKX SWAP · 5 ESTRATÉGIAS</h2>
-          <p className="text-xs text-muted-foreground">GPS: H4+M15 · EMA 9/21/200 · RSI(6) · SAR · Fibonacci · 6 Ativos · Auto 30s</p>
+          <h2 className="text-sm font-black text-primary tracking-widest">TRADESNIPER AI PRO · OKX SWAP · 5 ESTRATÉGIAS</h2>
+          <p className="text-xs text-muted-foreground">GPS: H4+M15 · EMA 9/21/200 · RSI(6) · SAR · Fibonacci · Banca $2.000 · Anti-Spam 10min</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {lastScan && (
@@ -475,7 +598,7 @@ export function MonitorScanner() {
             {alerts.length === 0 ? (
               <div className="text-xs text-muted-foreground text-center mt-8">
                 Varrendo mercado OKX...<br />
-                <span className="text-[10px]">5 estratégias ativas</span>
+                <span className="text-[10px]">5 estratégias · anti-spam 10min</span>
               </div>
             ) : (
               alerts.map(a => (
@@ -495,8 +618,8 @@ export function MonitorScanner() {
                     </span>
                     <span className="text-[10px] font-bold text-primary">{a.leverage}x</span>
                   </div>
-                  <div className="text-[10px] text-yellow-400 font-bold">
-                    {strategyEmoji[a.strategy] || '⚡'} {a.strategy}
+                  <div className={cn("text-[10px] font-bold", a.strategy === 'SINAL MESTRE' ? 'text-yellow-300 animate-pulse' : 'text-yellow-400')}>
+                    {strategyEmoji[a.strategy] || '⚡'} {a.strategy === 'SINAL MESTRE' ? `SINAL MESTRE (${a.strategies.join('+')})`  : a.strategy}
                   </div>
                   <div className="text-xs text-white mt-0.5">${fmt(a.price)}</div>
                   <div className="flex gap-2 text-[10px] mt-1">
