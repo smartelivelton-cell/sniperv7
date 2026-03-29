@@ -30,3 +30,11 @@ timeoutMs = 20000
 [userenv.shared]
 BINANCE_API_KEY = "hOVWo9iJ8BcvbIZSNKwgnIyjHlna3xMrFBc5GA0keAx6VxBPaOBIPG7M3lJq4bbw"
 BINANCE_SECRET_KEY = "b9QKY3qthBwduBQjVgnnOhVaKdYttiR0QK0lIvFpFA8Ap38HAM7A8xjfcofAY87A"
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
+
+[[ports]]
+localPort = 8080
+externalPort = 80
