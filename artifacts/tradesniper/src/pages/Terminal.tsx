@@ -13,7 +13,7 @@ import type { AnalysisResult } from '@workspace/api-client-react/src/generated/a
 import { useCreateTrade } from '@workspace/api-client-react';
 import { LayoutDashboard, Eye, Calculator, Bot, Radar } from 'lucide-react';
 
-const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'ZEC', 'OP', 'QTUM', 'AXS', 'AVAX'];
+const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 
 const TABS = [
   { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
