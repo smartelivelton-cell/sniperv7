@@ -1,0 +1,60 @@
+🚀 PROMPT MESTRE CONSOLIDADO: INTELIGÊNCIA CRYPTOSNIPER PRO
+Instrução para o Agente: Reconstrua o sistema de trading focado em scalping e continuidade, integrando as seguintes 5 estratégias operacionais e lógica de multitemporalidade.
+
+🌍 1. HIERARQUIA MESTRE (O GPS)
+Regra Inegociável: Antes de qualquer sinal, verificar D1 e H4.
+
+Só disparar SHORT se o preço estiver abaixo das médias (EMA 21/200).
+
+Só disparar LONG se o preço estiver acima das médias.
+
+Objetivo: Operar sempre a favor da tendência para evitar ficar travado.
+
+📈 2. AS 5 ESTRATÉGIAS INTEGRADAS (OPERACIONAIS)
+Muralha & Suporte 200 (M5/M15):
+
+Monitorar a EMA 200 (Linha Verde). O preço tende a respeitar esse nível como uma barreira institucional.
+
+Entrada: No primeiro toque na EMA 200 a favor da tendência macro.
+
+Filtro: RSI(6) deve estar em exaustão (>75 para venda / <25 para compra).
+
+Surfe 200 (Continuidade de Fluxo):
+
+Se o preço "estourar" a EMA 200 com volume alto, o robô deve identificar a continuidade.
+
+Entrada: No rompimento confirmado ou no primeiro reteste da média após o estouro.
+
+Onda de Continuidade SAR (M15):
+
+Usa o SAR Parabólico para detectar novas ondas de queda/alta sem esperar reversão.
+
+Entrada: Se GPS = BAIXA e o ponto do SAR aparecer acima da vela no M15, disparar venda imediata.
+
+Retração de 50% (Fibonacci Institucional):
+
+Após uma vela de força (Volume 3x acima da média), o robô traça a retração.
+
+Entrada: Ordem limite exatamente no nível de 50% da vela anterior.
+
+Exaustão Sniper (RSI Rápido):
+
+Operacional de scalping curto quando o mercado está esticado demais.
+
+Entrada: RSI(6) atingindo níveis extremos enquanto o preço toca qualquer uma das médias (EMA 9, 21 ou 200).
+
+🛡️ 3. MÓDULO DE GESTÃO E RISCO (BANCA $187,50)
+Cálculo de Margem de Caução: Manter o Preço de Liquidação com distância segura (mínimo 10%).
+
+Meta Diária: Configurar calculadora de lote para buscar $100/dia.
+
+Protocolo Risco Zero: Ao atingir o Alvo 1, disparar automaticamente: "✅ Alvo 1 Batido! Mover Stop para o Preço de Entrada (Break-Even) AGORA."
+
+Stop Móvel SAR: Usar os pontos do SAR Parabólico para ir "descendo" o Stop e proteger o lucro enquanto o preço cai.
+
+📱 4. INTERFACE DE ALERTAS (TELEGRAM/DASHBOARD)
+Formatação: Usar emojis e negrito para clareza (🚀 ENTRADA, 💰 WIN, ⚠️ PERIGO).
+
+Dados Obrigatórios: Ativo, Alavancagem (5x/25x/50x), Preço de Entrada, 3 Alvos e Stop Loss.
+
+Aviso de Multitemporalidade: Notificar se o gatilho foi no M5 com confirmação no M15.
