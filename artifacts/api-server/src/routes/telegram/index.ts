@@ -96,12 +96,15 @@ router.post("/notify", async (req, res) => {
 
   const isMaster = Array.isArray(strategies) && strategies.length > 1;
   const stratList = isMaster ? strategies.join(" + ") : strategy;
+  const isReversal = strategy === "Fênix Reversão";
   const stratEmoji =
     strategy === "Muralha 200" ? "🏰" :
+    strategy === "Muralha Buffer" ? "🏰" :
     strategy === "Surfe 200" ? "🌊" :
     strategy === "Onda SAR" ? "📡" :
     strategy === "Fibonacci 50%" ? "📐" :
     strategy === "Exaustão Sniper" ? "🎯" :
+    isReversal ? "🔥" :
     isMaster ? "🚀" : "⚡";
 
   const slPct = absPct(price, sl).toFixed(2);
@@ -111,11 +114,18 @@ router.post("/notify", async (req, res) => {
 
   const header = isMaster
     ? `🚀 <b>SINAL MESTRE DETECTADO! (${stratList})</b>`
+    : isReversal
+    ? `🔥 <b>FÊNIX DE REVERSÃO DETECTADO!</b>`
     : `${stratEmoji} <b>SINAL SNIPER DETECTADO!</b>`;
+
+  const reversalWarning = isReversal
+    ? `⚠️ <b>OPERAÇÃO DE REVERSÃO — ALVO CURTO</b>\n`
+    : "";
 
   const message =
     `${header}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
+    `${reversalWarning}` +
     `🪙 Ativo: <b>${symbol}</b>\n` +
     `${stratEmoji} Estratégia: <b>${stratList}</b>\n` +
     `⏱ Timeframe: <b>M15</b>${h4Label ? ` · ${h4Label}` : ""}\n` +
@@ -236,14 +246,17 @@ router.post("/activate", async (req, res) => {
       `📡 Monitorando OKX SWAP 24h\n` +
       `🪙 Ativos: BTC · ETH · SOL · DOGE · AXS · AVAX\n` +
       `💼 Banca de Referência: <b>$2.000</b>\n` +
-      `🧠 5 Estratégias Ativas:\n` +
-      `  🏰 Muralha & Suporte 200\n` +
+      `🧠 <b>7 Estratégias Ativas:</b>\n` +
+      `  🏰 Muralha 200 (com Buffer 0.2%)\n` +
       `  🌊 Surfe 200\n` +
       `  📡 Onda SAR Parabólico\n` +
       `  📐 Retração 50% Fibonacci\n` +
       `  🎯 Exaustão Sniper RSI(6)\n` +
-      `🚀 Anti-Spam: cooldown 10min por ativo\n` +
-      `⏱ Varredura: a cada 30s · GPS: H4 + M15`
+      `  🔥 Fênix de Reversão (Volume + RSI &lt; 20)\n` +
+      `  🛡️ Protocolo Risco Zero (SL no Break-Even)\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🚀 Anti-Spam: Cooldown 10min por ativo\n` +
+      `⏱ Varredura: A cada 30s · GPS: H4 + M15`
     );
     res.json({ ok: true });
   } catch (err: any) {
