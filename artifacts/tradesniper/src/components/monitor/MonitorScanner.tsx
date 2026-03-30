@@ -138,10 +138,12 @@ async function sendActivationMessage() {
 
 const strategyEmoji: Record<string, string> = {
   'Muralha 200': '🏰',
+  'Muralha Buffer': '🏰',
   'Surfe 200': '🌊',
   'Onda SAR': '📡',
   'Fibonacci 50%': '📐',
   'Exaustão Sniper': '🎯',
+  'Fênix Reversão': '🔥',
   'SINAL MESTRE': '🚀',
 };
 
@@ -328,6 +330,26 @@ export function MonitorScanner() {
         rawSignals.push({ direction: 'SHORT', strategy: 'Exaustão Sniper', leverage: 50, reason: `🎯 RSI(6) exaustão de compra: ${currRsi.toFixed(0)} — toque na média` });
       }
 
+      // Estratégia 6: Muralha com Buffer — Antecipação SHORT
+      // H4 BEAR apenas (antecipação antes do toque exato na EMA200)
+      const approachingEma200FromAbove = price > curr200 && near200;
+      if (approachingEma200FromAbove && h4Trend === 'BEAR' && currRsi > 75) {
+        rawSignals.push({ direction: 'SHORT', strategy: 'Muralha Buffer', leverage: 50, reason: `🏰 Antecipação: preço a 0.2% da EMA200 | H4 BEAR | RSI(6): ${currRsi.toFixed(0)}` });
+      }
+
+      // Estratégia 7: Fênix de Reversão — Contra-Tendência LONG
+      const farBelowEma200 = curr200 > 0 && (curr200 - price) / curr200 > 0.02;
+      const firstGreenCandle = lastCandle.close > lastCandle.open;
+      const volumeSpike30 = lastCandle.volume > avgVol * 1.3;
+      if (farBelowEma200 && currRsi < 20 && firstGreenCandle && volumeSpike30) {
+        rawSignals.push({
+          direction: 'LONG',
+          strategy: 'Fênix Reversão',
+          leverage: 25,
+          reason: `🔥 REVERSÃO: ${((curr200 - price) / curr200 * 100).toFixed(1)}% abaixo EMA200 | RSI(6): ${currRsi.toFixed(0)} | Vol: ${(lastCandle.volume / avgVol).toFixed(1)}x ⚠️ ALVO CURTO`,
+        });
+      }
+
       if (rawSignals.length === 0) return;
 
       // ── MODULE 1: Apply 10-min cooldown per asset ────────────────────────────
@@ -488,8 +510,8 @@ export function MonitorScanner() {
 
       <div className="flex items-center gap-3 shrink-0">
         <div className="flex-1">
-          <h2 className="text-sm font-black text-primary tracking-widest">TRADESNIPER AI PRO · OKX SWAP · 5 ESTRATÉGIAS</h2>
-          <p className="text-xs text-muted-foreground">GPS: H4+M15 · EMA 9/21/200 · RSI(6) · SAR · Fibonacci · Banca $2.000 · Anti-Spam 10min</p>
+          <h2 className="text-sm font-black text-primary tracking-widest">TRADESNIPER AI PRO · OKX SWAP · 7 ESTRATÉGIAS</h2>
+          <p className="text-xs text-muted-foreground">GPS: H4+M15 · EMA 9/21/200 · RSI(6) · SAR · Fib · Muralha Buffer · Fênix · Banca $2.000</p>
         </div>
         <div className="flex items-center gap-3 shrink-0">
           {lastScan && (
