@@ -1,0 +1,28 @@
+# 🦾 PROMPT DE REESTRUTURAÇÃO: TRADESNIPER AI PRO – GERAÇÃO V7
+
+**Instrução para o Agente:** Reconstrua os módulos de análise, interface e histórico, focando em antecipação de fluxo, reversão de polaridade e prova social estatística.
+
+### 📊 1. DASHBOARD DE CONFIABILIDADE (BACKTEST 365D)
+Substitua a aba "Calculadora" por um **Hub de Estatísticas Reais**:
+* **Data Engine:** Simule/Processe os últimos 365 dias para as 7 estratégias (Muralha, Surfe, Fênix, Fibonacci, Sniper RSI, Onda SAR, Break-Even).
+* **Cards de Performance:** Exiba para cada estratégia: **Win Rate (Alvo 1)**, **Total de Sinais/Ano** e **Status (🔥 EM ALTA / 🧊 RESFRIANDO)**.
+* **Métrica de Versatilidade:** Separe o histórico por direção (**Performance em SHORTS** vs **Performance em LONGS**).
+* **Filtro de Especialização:** Permita ao usuário clicar em uma estratégia para filtrar o gráfico de evolução (Equity Curve) baseado em uma banca de **$2.000**.
+
+### ⚡ 2. MOTOR DE DECISÃO V7: INVERSÃO E ANTECIPAÇÃO
+Implemente a lógica de **Inversão de Polaridade** e **Leitura de Fluxo**:
+* **Radar de Aproximação (M5):** O sistema deve monitorar a velocidade de chegada na EMA 200. Se a aceleração for alta e o volume no M5 subir, pré-calcule o rompimento antes do toque no M15.
+* **Filtro de Ruptura (Corpo e Volume):** * Se a vela de toque na EMA 200 tiver **>70% de corpo** (sem pavio de rejeição) e o **Volume Atual ≥ 1.5x a média**, cancele a retração e opere o **ROMPIMENTO**.
+    * **Gatilho Matemático:** `Corpo da Vela > (Pavio Superior + Pavio Inferior) * 2`.
+* **Sincronia SAR + Médias:** Só confirme a inversão (ex: de Short para Long) se o **SAR Parabólico** pular para baixo da vela e a **EMA 9** inclinar $> 30^\circ$.
+
+### 🌡️ 3. INTELIGÊNCIA DE MERCADO E SENTIMENTO
+* **Termômetro BTC:** Bloqueie sinais de Altcoins (ETH, SOL, etc.) se o BTC estiver em tendência oposta no M15.
+* **Confluência 5TFs:** O sinal só recebe selo **🔥 ALTA PROBABILIDADE** se houver alinhamento em D1, H4, H1, M15 e M5.
+* **Monitor de Book:** Se o fluxo (Bid/Ask) mostrar dominância de 65% para um lado no momento do toque na média, siga o fluxo do Book ignorando o RSI.
+
+### 🧠 4. INTERFACE E SUPORTE AO TRADER (ANTI-ANSIEDADE)
+* **Entrada em Escada:** Sugira sempre Entrada 1 (Mercado) e Entrada 2 (Proteção na EMA 21) para melhorar o preço médio.
+* **Mensagens de Mentoria:** Se o trade entrar em Drawdown, mas o SAR e a EMA 200 ainda sustentarem a tese, envie: 
+    > "🧠 **MANTENHA A CALMA:** O preço recuou, mas o SAR e a Muralha ainda garantem a queda. Probabilidade estatística: 70%."
+* **Alertas de Inversão:** > "⚠️ **INVERSÃO DE FLUXO!** A Muralha não segurou. Pressão detectada no Book. Mudando para [LONG/SHORT] para surfar o rompimento!"
