@@ -65,6 +65,25 @@ interface ActiveSignalState {
   tp3Hit: boolean;
 }
 
+interface InversionAlert {
+  id: string;
+  symbol: string;
+  from: 'LONG' | 'SHORT';
+  to: 'LONG' | 'SHORT';
+  price: number;
+  reason: string;
+  ts: number;
+}
+
+interface MentoringMessage {
+  id: string;
+  symbol: string;
+  direction: 'LONG' | 'SHORT';
+  price: number;
+  text: string;
+  ts: number;
+}
+
 interface CoinState {
   symbol: string;
   price: number;
@@ -262,6 +281,10 @@ export function MonitorScanner() {
   const [activeAlert, setActiveAlert] = useState<SignalAlert | null>(null);
   const [lastScan, setLastScan] = useState<Date | null>(null);
   const [nextScanIn, setNextScanIn] = useState(0);
+  const [inversionAlerts, setInversionAlerts] = useState<InversionAlert[]>([]);
+  const [mentoringMessages, setMentoringMessages] = useState<MentoringMessage[]>([]);
+  const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set());
+  const prevEma200Ref = useRef<Map<string, number>>(new Map());
 
   const seenIds         = useRef<Set<string>>(new Set());
   const cooldownMap     = useRef<Map<string, number>>(new Map());
@@ -332,6 +355,31 @@ export function MonitorScanner() {
 
       const multiTrend: MultiTrend = { d1: d1Trend, h4: h4Trend, h1: h1Trend, m15: m15Trend, m5: m5Trend };
 
+      // ── V7: Body/Wick Breakout Filter ──────────────────────────────────────
+      const body = Math.abs(lastCandle.close - lastCandle.open);
+      const upperWick = lastCandle.high - Math.max(lastCandle.close, lastCandle.open);
+      const lowerWick = Math.min(lastCandle.close, lastCandle.open) - lastCandle.low;
+      const totalRange = lastCandle.high - lastCandle.low;
+      const bodyPct = totalRange > 0 ? body / totalRange : 0;
+      const bodyDominant = body > (upperWick + lowerWick) * 2;
+      const isBreakoutCandle = bodyPct > 0.7 && lastCandle.volume >= avgVol * 1.5 && bodyDominant;
+
+      // ── V7: M5 Proximity Radar (aceleração de aproximação da EMA200) ────────
+      const m5Closes = candles5m.map(c => c.close);
+      const m5Last   = m5Closes.length - 1;
+      const m5DistCurr = curr200 > 0 ? Math.abs(m5Closes[m5Last] - curr200) / curr200 : 1;
+      const m5DistPrev = curr200 > 0 && m5Last >= 3
+        ? Math.abs(m5Closes[m5Last - 3] - curr200) / curr200
+        : m5DistCurr;
+      const approachingFast = m5DistPrev - m5DistCurr > 0.003;
+      const m5VolSurge = m5Last >= 1 && candles5m[m5Last]?.volume > (candles5m[m5Last - 1]?.volume ?? 0) * 1.3;
+      const preBreakoutSignal = approachingFast && m5VolSurge && m5DistCurr < 0.008;
+
+      // ── V7: EMA9 Inclination sync (≈30°) ───────────────────────────────────
+      const ema9Slope = curr9 - (ema9arr[last - 1] ?? curr9);
+      const ema9Inclining = ema9Slope > curr9 * 0.0002;
+      const ema9Declining = ema9Slope < -curr9 * 0.0002;
+
       // ── Update BTC reference trend ───────────────────────────────────────────
       if (symbol === 'BTC') btcTrendRef.current = m15Trend;
 
@@ -370,6 +418,22 @@ export function MonitorScanner() {
           if (sarHolds) {
             calmSentRef.current.add(calmKey);
             sendCalmMessage(sig, price);
+            const dd = (drawdown * 100).toFixed(2);
+            const mentorTexts = [
+              `O SAR continua ${isLong ? 'de alta' : 'de baixa'} — o setup ainda é válido. ${dd}% de recuo é normal nessa estratégia. Mantenha o plano.`,
+              `Recuos são parte do trading. O SAR não inverteu. Enquanto a estrutura aguenta, o trade está vivo. Respire.`,
+              `A EMA200 é um ímã — o preço oscila antes de reagir. SAR confirma: você ainda está no lado certo.`,
+              `${dd}% de flutuação não é perda — é só o mercado testando o suporte. O setup está intacto.`,
+            ];
+            const mentor: MentoringMessage = {
+              id: calmKey,
+              symbol: sig.symbol,
+              direction: sig.direction,
+              price,
+              text: mentorTexts[Math.floor(Date.now() / 1000) % mentorTexts.length],
+              ts: Date.now(),
+            };
+            setMentoringMessages(prev => [mentor, ...prev.filter(m => m.id !== mentor.id)].slice(0, 5));
           }
         }
 
@@ -409,20 +473,38 @@ export function MonitorScanner() {
       if (near200 && bearGPS && currRsi > 70)
         rawSignals.push({ direction: 'SHORT', strategy: 'Muralha 200', leverage: 50, reason: `🏰 EMA200 resistência institucional | RSI(6): ${currRsi.toFixed(0)}` });
 
-      // 2 — Surfe 200 (rompimento com volume)
+      // 2 — Surfe 200 (rompimento com volume) — V7: filtro Corpo+Volume
       const crossedAbove200 = prevClose < prevEma200 && price > curr200;
       const crossedBelow200 = prevClose > prevEma200 && price < curr200;
       const bigVolume = lastCandle.volume > avgVol * 2;
-      if (crossedAbove200 && bigVolume && h4Trend === 'BULL')
-        rawSignals.push({ direction: 'LONG', strategy: 'Surfe 200', leverage: 25, reason: `🌊 Rompimento acima EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x` });
-      if (crossedBelow200 && bigVolume && h4Trend === 'BEAR')
-        rawSignals.push({ direction: 'SHORT', strategy: 'Surfe 200', leverage: 25, reason: `🌊 Rompimento abaixo EMA200 com volume ${(lastCandle.volume / avgVol).toFixed(1)}x` });
+      if (crossedAbove200 && bigVolume && h4Trend === 'BULL') {
+        const tag = isBreakoutCandle ? '⚡ ROMPIMENTO (Corpo>70% + Vol≥1.5x)' : '🌊 Rompimento';
+        rawSignals.push({ direction: 'LONG', strategy: 'Surfe 200', leverage: isBreakoutCandle ? 35 : 25,
+          reason: `${tag} acima EMA200 · Vol ${(lastCandle.volume / avgVol).toFixed(1)}x · Corpo ${Math.round(bodyPct * 100)}%` });
+      }
+      if (crossedBelow200 && bigVolume && h4Trend === 'BEAR') {
+        const tag = isBreakoutCandle ? '⚡ ROMPIMENTO (Corpo>70% + Vol≥1.5x)' : '🌊 Rompimento';
+        rawSignals.push({ direction: 'SHORT', strategy: 'Surfe 200', leverage: isBreakoutCandle ? 35 : 25,
+          reason: `${tag} abaixo EMA200 · Vol ${(lastCandle.volume / avgVol).toFixed(1)}x · Corpo ${Math.round(bodyPct * 100)}%` });
+      }
+      // V7: Radar M5 — pré-calcula rompimento antes do toque no M15
+      if (preBreakoutSignal && bullGPS)
+        rawSignals.push({ direction: 'LONG',  strategy: 'Muralha Buffer', leverage: 25, reason: `🔭 RADAR M5: aceleração detectada + vol ↑. Rompimento da EMA200 antecipado!` });
+      if (preBreakoutSignal && bearGPS)
+        rawSignals.push({ direction: 'SHORT', strategy: 'Muralha Buffer', leverage: 25, reason: `🔭 RADAR M5: aceleração detectada + vol ↑. Queda na EMA200 antecipada!` });
 
-      // 3 — Onda SAR Parabólico
+      // 3 — Onda SAR Parabólico — V7: requer SAR + EMA9 alinhados (sync)
       const sarFlippedUp   = prevSar && !prevSar.isLong && currSar?.isLong;
       const sarFlippedDown = prevSar && prevSar.isLong && !currSar?.isLong;
-      if (sarFlippedUp   && bullGPS) rawSignals.push({ direction: 'LONG',  strategy: 'Onda SAR', leverage: 25, reason: '📡 SAR virou para cima — nova onda de alta' });
-      if (sarFlippedDown && bearGPS) rawSignals.push({ direction: 'SHORT', strategy: 'Onda SAR', leverage: 25, reason: '📡 SAR virou para baixo — nova onda de queda' });
+      const sarEma9LongSync  = sarFlippedUp   && ema9Inclining;
+      const sarEma9ShortSync = sarFlippedDown && ema9Declining;
+      if (sarEma9LongSync  && bullGPS) rawSignals.push({ direction: 'LONG',  strategy: 'Onda SAR', leverage: 25,
+        reason: `📡 SAR ▲ + EMA9 inclinando (${ema9Slope > 0 ? '+' : ''}${(ema9Slope / curr9 * 100).toFixed(3)}%/vela) — sync confirmado` });
+      if (sarEma9ShortSync && bearGPS) rawSignals.push({ direction: 'SHORT', strategy: 'Onda SAR', leverage: 25,
+        reason: `📡 SAR ▼ + EMA9 declinando (${(ema9Slope / curr9 * 100).toFixed(3)}%/vela) — sync confirmado` });
+      // Fallback sem sync (sinal pendente)
+      if (sarFlippedUp   && !ema9Inclining && bullGPS) rawSignals.push({ direction: 'LONG',  strategy: 'Onda SAR', leverage: 15, reason: '📡 SAR virou ▲ — aguardando EMA9 sincronizar (alavancagem reduzida)' });
+      if (sarFlippedDown && !ema9Declining && bearGPS) rawSignals.push({ direction: 'SHORT', strategy: 'Onda SAR', leverage: 15, reason: '📡 SAR virou ▼ — aguardando EMA9 sincronizar (alavancagem reduzida)' });
 
       // 4 — Retração 50% Fibonacci
       const isStrongCandle = prevCandle.volume > avgVol * 3;
@@ -470,11 +552,46 @@ export function MonitorScanner() {
       const leverage    = Math.max(...dominant.map(s => s.leverage));
       const reason      = dominant.map(s => s.reason).join(' | ');
 
-      // ── MODULE: Termômetro BTC — block altcoin SHORTs when BTC is rising ─────
-      if (symbol !== 'BTC' && direction === 'SHORT' && btcTrendRef.current === 'BULL') {
-        sendRetainedAlert(symbol, direction, price, strategies);
-        return;
+      // ── MODULE: Termômetro BTC V7 — bloqueia sinais contra a tendência do BTC ──
+      if (symbol !== 'BTC') {
+        const btcTrend = btcTrendRef.current;
+        if (direction === 'SHORT' && btcTrend === 'BULL') {
+          sendRetainedAlert(symbol, direction, price, strategies);
+          return;
+        }
+        if (direction === 'LONG' && btcTrend === 'BEAR') {
+          sendRetainedAlert(symbol, direction, price, strategies);
+          return;
+        }
       }
+
+      // ── V7: Detecção de Inversão de Fluxo ──────────────────────────────────────
+      const prevEma200Stored = prevEma200Ref.current.get(symbol);
+      if (prevEma200Stored !== undefined) {
+        const prevWasAbove = prevClose > prevEma200Stored;
+        const nowBelow200  = price < curr200;
+        const prevWasBelow = prevClose < prevEma200Stored;
+        const nowAbove200  = price > curr200;
+        if (prevWasAbove && nowBelow200) {
+          const inv: InversionAlert = {
+            id: `inv-${symbol}-short-${Math.floor(now / 60000)}`,
+            symbol, from: 'LONG', to: 'SHORT', price,
+            reason: `A EMA200 não segurou — pressão vendedora detectada. Inversão para SHORT!`,
+            ts: now,
+          };
+          setInversionAlerts(prev => [inv, ...prev.filter(a => a.id !== inv.id)].slice(0, 8));
+        }
+        if (prevWasBelow && nowAbove200) {
+          const inv: InversionAlert = {
+            id: `inv-${symbol}-long-${Math.floor(now / 60000)}`,
+            symbol, from: 'SHORT', to: 'LONG', price,
+            reason: `EMA200 rompida para cima — pressão compradora forte. Inversão para LONG!`,
+            ts: now,
+          };
+          setInversionAlerts(prev => [inv, ...prev.filter(a => a.id !== inv.id)].slice(0, 8));
+        }
+      }
+      prevEma200Ref.current.set(symbol, curr200);
 
       // ── Confluence scoring ───────────────────────────────────────────────────
       const count = confluenceScore(multiTrend, direction);
@@ -761,8 +878,67 @@ export function MonitorScanner() {
         </div>
 
         {/* Alerts panel */}
-        <div className="w-72 shrink-0 flex flex-col gap-2">
-          <div className="text-xs font-black text-muted-foreground tracking-widest flex items-center gap-2">
+        <div className="w-72 shrink-0 flex flex-col gap-2 overflow-y-auto">
+
+          {/* V7: Inversion Alerts */}
+          {inversionAlerts.length > 0 && (
+            <div className="shrink-0">
+              <div className="text-xs font-black text-orange-400 tracking-widest flex items-center gap-2 mb-1">
+                ⚠️ INVERSÕES DE FLUXO
+                <span className="bg-orange-500/20 text-orange-400 rounded px-1.5 py-0.5">{inversionAlerts.length}</span>
+                <button onClick={() => setInversionAlerts([])} className="ml-auto text-[10px] text-muted-foreground hover:text-white">✕ limpar</button>
+              </div>
+              <div className="flex flex-col gap-1 max-h-36 overflow-y-auto">
+                {inversionAlerts.map(inv => (
+                  <div key={inv.id} className="p-2 rounded-lg border border-orange-500/40 bg-orange-900/20 text-xs">
+                    <div className="flex justify-between items-center mb-0.5">
+                      <span className="font-black text-orange-300">{inv.symbol}</span>
+                      <span className="text-[10px] text-muted-foreground">{new Date(inv.ts).toLocaleTimeString('pt-BR')}</span>
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-bold mb-1">
+                      <span className={inv.from === 'LONG' ? 'text-green-400' : 'text-red-400'}>
+                        {inv.from === 'LONG' ? '▲ LONG' : '▼ SHORT'}
+                      </span>
+                      <span className="text-orange-400">→</span>
+                      <span className={inv.to === 'LONG' ? 'text-green-400' : 'text-red-400'}>
+                        {inv.to === 'LONG' ? '▲ LONG' : '▼ SHORT'}
+                      </span>
+                      <span className="ml-auto font-mono text-white">${inv.price.toFixed(2)}</span>
+                    </div>
+                    <div className="text-[10px] text-orange-200/80 leading-tight">{inv.reason}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* V7: Mentoring / Anti-anxiety Messages */}
+          {mentoringMessages.filter(m => !dismissedMessages.has(m.id)).length > 0 && (
+            <div className="shrink-0">
+              <div className="text-xs font-black text-blue-400 tracking-widest flex items-center gap-2 mb-1">
+                🧘 MENTOR SNIPER
+              </div>
+              <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                {mentoringMessages.filter(m => !dismissedMessages.has(m.id)).map(m => (
+                  <div key={m.id} className="p-2 rounded-lg border border-blue-500/40 bg-blue-900/20 relative">
+                    <div className="flex items-center gap-1 mb-1">
+                      <span className={cn("text-[10px] font-black", m.direction === 'LONG' ? 'text-green-400' : 'text-red-400')}>
+                        {m.direction === 'LONG' ? '▲' : '▼'} {m.symbol}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground ml-auto">{new Date(m.ts).toLocaleTimeString('pt-BR')}</span>
+                      <button
+                        onClick={() => setDismissedMessages(prev => new Set([...prev, m.id]))}
+                        className="text-[10px] text-muted-foreground hover:text-white ml-1"
+                      >✕</button>
+                    </div>
+                    <div className="text-[10px] text-blue-200/90 leading-snug italic">"{m.text}"</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="text-xs font-black text-muted-foreground tracking-widest flex items-center gap-2 shrink-0">
             ALERTAS SNIPER
             {alerts.length > 0 && <span className="bg-primary/20 text-primary rounded px-1.5 py-0.5">{alerts.length}</span>}
           </div>
