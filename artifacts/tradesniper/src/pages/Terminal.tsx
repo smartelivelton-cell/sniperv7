@@ -8,18 +8,20 @@ import { GoalsTracker } from '@/components/calculator/GoalsTracker';
 import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
 import { MonitorScanner } from '@/components/monitor/MonitorScanner';
+import { BacktestHub } from '@/components/backtest/BacktestHub';
 import { cn } from '@/lib/utils';
 import type { AnalysisResult } from '@workspace/api-client-react/src/generated/api.schemas';
 import { useCreateTrade } from '@workspace/api-client-react';
-import { LayoutDashboard, Eye, Calculator, Bot, Radar } from 'lucide-react';
+import { LayoutDashboard, Eye, BarChart2, Bot, Radar, Calculator } from 'lucide-react';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 
 const TABS = [
   { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
   { id: 'vision', label: 'Visão IA', icon: Eye },
-  { id: 'calculator', label: 'Calculadora & Metas', icon: Calculator },
-  { id: 'scanner', label: 'Scanner', icon: Radar },
+  { id: 'backtest', label: 'Hub Estatísticas', icon: BarChart2 },
+  { id: 'calculator', label: 'Calculadora', icon: Calculator },
+  { id: 'scanner', label: 'Scanner V7', icon: Radar },
   { id: 'copilot', label: 'Copiloto Chat', icon: Bot },
 ] as const;
 
@@ -154,7 +156,12 @@ export default function Terminal() {
         </div>
       </div>
 
-      {/* ── ABA 3: CALCULADORA & METAS ── */}
+      {/* ── ABA 3: HUB DE ESTATÍSTICAS ── */}
+      <div className={cn("flex-1 flex overflow-hidden", activeTab !== 'backtest' && "hidden")}>
+        <BacktestHub />
+      </div>
+
+      {/* ── ABA 4: CALCULADORA & METAS ── */}
       <div className={cn("flex-1 flex overflow-hidden p-2 gap-2", activeTab !== 'calculator' && "hidden")}>
         <div className="w-[45%] overflow-y-auto">
           <SniperCalculator

@@ -38,6 +38,23 @@ artifacts-monorepo/
 └── package.json
 ```
 
+## V7 Decision Engine (Latest)
+
+### BacktestHub (Hub Estatísticas tab)
+- Replaced "Calculadora & Metas" tab with the new V7 Backtest Hub
+- 7 strategy performance cards: Muralha 200, Surfe 200, Fênix Reversão, Fibonacci 50%, Sniper RSI, Onda SAR, Break-Even
+- Each card shows: Win Rate (Alvo 1), Signals/year, Status (🔥 EM ALTA / 🧊 RESFRIANDO), Long/Short breakdown
+- Equity Curve: recharts AreaChart with 52-week simulation from $2,000 bankroll + optional drawdown overlay
+- Direction filter: ALL / LONGS only / SHORTS only
+
+### Scanner V7 Enhancements
+- **M5 Proximity Radar**: Detects acceleration of approach to EMA200 on M5 + volume surge → fires pre-breakout "Muralha Buffer" signal
+- **Breakout Filter**: Body>70% of range AND Volume≥1.5× avg AND Body>(Wicks×2) → upgrades to "⚡ ROMPIMENTO CONFIRMADO" with 35x leverage
+- **SAR+EMA9 Sync**: Onda SAR strategy now requires EMA9 inclination >0.02%/candle in the same direction; unsync'd SAR flips get reduced 15x leverage
+- **BTC Thermometer V7**: Also blocks altcoin LONGs when BTC trend is BEAR (previously only blocked SHORTs when BTC BULL)
+- **Inversion Alerts**: In-UI panel (orange) fires when EMA200 support/resistance breaks, showing FROM→TO direction with reason
+- **Mentor Sniper**: Anti-anxiety UI panel (blue) shows dismissible mentoring messages during drawdown when SAR holds the position
+
 ## Features
 
 ### 1. Live Price Ticker (Header Marquee)
