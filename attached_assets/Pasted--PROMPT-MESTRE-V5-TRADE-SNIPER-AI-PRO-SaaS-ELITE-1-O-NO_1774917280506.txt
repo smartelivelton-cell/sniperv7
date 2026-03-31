@@ -1,0 +1,41 @@
+🚀 PROMPT MESTRE V5: TRADE SNIPER AI PRO (SaaS ELITE)
+🌍 1. O NOVO GPS: MULTITEMPORALIDADE TOTAL
+Regra de Varredura: Antes de emitir qualquer alerta, o sistema deve validar a tendência nos seguintes tempos: D1, H4, H1, M15 e M5.
+
+Confluência Absoluta: Se 4 dos 5 tempos estiverem alinhados (ex: todos em Baixa), o sinal recebe a tag 🔥 SINAL DE ALTA PROBABILIDADE.
+
+Relatório de Tendência: Ao iniciar, e a cada 4 horas, enviar um resumo:
+
+📊 RELATÓRIO DE RADAR SNIPER:
+🪙 BTC: D1(🔴) H4(🔴) H1(🟡) M15(🔴) M5(🟢) -> Status: AGUARDAR
+🪙 ETH: D1(🔴) H4(🔴) H1(🔴) M15(🔴) M5(🔴) -> Status: SHORT CONFIRMADO
+
+🌡️ 2. MÓDULO TERMÔMETRO BTC (CORRELAÇÃO)
+Lógica: O Bitcoin é o maestro do mercado.
+
+Regra de Bloqueio: Se o sinal for de SHORT em uma Altcoin (SOL, ETH, AXS, etc.), mas o BTC estiver subindo no M15, o robô deve travar o sinal e avisar: "⚠️ SINAL RETIDO: Tendência da Altcoin é queda, mas BTC está em alta. Aguardando alinhamento do mestre."
+
+🧠 3. MOTOR ANTI-ANSIEDADE (SUPORTE PSICOLÓGICO)
+Lógica de Monitoramento: Se o usuário estiver em uma operação e o preço for contra a entrada (Drawdown).
+
+Gatilho de Calma: Se o preço estiver negativo, mas o SAR Parabólico continuar acima do preço (em Short) e abaixo da EMA 200, envie:
+
+🧠 MANTENHA A DISCIPLINA:
+O preço está testando a região, mas o SAR Parabólico e a Muralha 200 ainda garantem a queda.
+Probabilidade de Win: 70%. Não feche no emocional!
+
+💰 4. GESTÃO DE BANCA $2.000 (ENTRADA EM ESCADA)
+Lógica: Otimizar o lucro com entradas parciais para evitar ficar "fora" do movimento ou tomar stop bobo.
+
+Entrada 1 (Mkt): 50% da posição no preço atual.
+
+Entrada 2 (Proteção): 50% da posição na EMA 21 ou EMA 9 (melhorando o preço médio).
+
+Cálculo de Lucro: Atualizar a tabela de WIN para a banca de $2.000, mostrando ganhos em 10x, 25x e 50x.
+
+🛡️ 5. REGRAS DE EXECUÇÃO (V4 ATUALIZADA)
+Fênix de Reversão: Se RSI(6) < 20 e volume explodir longe da média, disparar LONG de reversão (Alvo Curto).
+
+Muralha Buffer: Antecipar entrada a 0.2% da EMA 200 se o RSI estiver em exaustão.
+
+Protocolo Risco Zero: Bateu Alvo 1? Mover Stop para o Break-Even imediatamente.
