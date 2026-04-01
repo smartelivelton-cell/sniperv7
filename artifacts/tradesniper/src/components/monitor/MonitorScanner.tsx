@@ -239,6 +239,23 @@ async function sendCalmMessage(signal: SignalAlert, currentPrice: number) {
   } catch (_) {}
 }
 
+async function sendAnticipationAlert(
+  symbol: string,
+  side: 'LONG' | 'SHORT',
+  strategy: string,
+  price: number,
+  reason: string,
+  confluenceCount: number,
+) {
+  try {
+    await fetch(`${BASE}/api/telegram/anticipation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ symbol, side, strategy, price, reason, confluenceCount }),
+    });
+  } catch (_) {}
+}
+
 // ── Strategy emoji map ────────────────────────────────────────────────────────
 
 const strategyEmoji: Record<string, string> = {
@@ -286,9 +303,10 @@ export function MonitorScanner() {
   const [dismissedMessages, setDismissedMessages] = useState<Set<string>>(new Set());
   const prevEma200Ref = useRef<Map<string, number>>(new Map());
 
-  const seenIds         = useRef<Set<string>>(new Set());
-  const cooldownMap     = useRef<Map<string, number>>(new Map());
-  const activeSignalsRef = useRef<Map<string, ActiveSignalState>>(new Map());
+  const seenIds              = useRef<Set<string>>(new Set());
+  const cooldownMap          = useRef<Map<string, number>>(new Map());
+  const activeSignalsRef     = useRef<Map<string, ActiveSignalState>>(new Map());
+  const anticipationCooldown = useRef<Map<string, number>>(new Map());
   const calmSentRef     = useRef<Set<string>>(new Set());
   const coinsRef        = useRef<Record<string, CoinState>>({});
   const btcTrendRef     = useRef<'BULL' | 'BEAR' | 'NEUTRAL'>('NEUTRAL');
@@ -533,7 +551,33 @@ export function MonitorScanner() {
       if (farBelow && currRsi < 20 && greenCandle && volSpike30)
         rawSignals.push({ direction: 'LONG', strategy: 'Fênix Reversão', leverage: 25, reason: `🔥 REVERSÃO: ${((curr200 - price) / curr200 * 100).toFixed(1)}% abaixo EMA200 | RSI(6): ${currRsi.toFixed(0)} | Vol: ${(lastCandle.volume / avgVol).toFixed(1)}x ⚠️ ALVO CURTO` });
 
-      if (rawSignals.length === 0) return;
+      // ── V7: Antecipação 80% ───────────────────────────────────────────────────
+      const ANTICIPATION_COOLDOWN_MS = 30 * 60 * 1000;
+      if (rawSignals.length === 0) {
+        const antNow = Date.now();
+        const nearEma200_80 = curr200 > 0 && Math.abs(price - curr200) / curr200 < 0.02;
+        const rsiPreLong    = currRsi >= 30 && currRsi <= 40;
+        const rsiPreShort   = currRsi >= 60 && currRsi <= 70;
+
+        const bullReady80 = bullCount >= 3 && (nearEma200_80 || rsiPreLong);
+        const bearReady80 = bearCount >= 3 && (nearEma200_80 || rsiPreShort);
+
+        if (bullReady80 || bearReady80) {
+          const ant80Dir = bullReady80 ? 'LONG' : 'SHORT';
+          const antKey   = `${symbol}-${ant80Dir}-anticipation`;
+          const lastAnt  = anticipationCooldown.current.get(antKey) ?? 0;
+
+          if (antNow - lastAnt >= ANTICIPATION_COOLDOWN_MS) {
+            anticipationCooldown.current.set(antKey, antNow);
+            const ant80Strategy = nearEma200_80 ? 'Muralha 200' : 'Exaustão Sniper';
+            const ant80Reason   = nearEma200_80
+              ? `Preço a ${((Math.abs(price - curr200) / curr200) * 100).toFixed(2)}% da EMA200 · ${bullCount >= 3 ? 'GPS ' + bullCount + '/5 BULL' : 'GPS ' + bearCount + '/5 BEAR'}`
+              : `RSI(6) em ${currRsi.toFixed(0)} (zona de pré-exaustão) · ${bullCount >= 3 ? 'GPS ' + bullCount + '/5 BULL' : 'GPS ' + bearCount + '/5 BEAR'}\n→ Aguardando toque na média e volume confirmador.`;
+            sendAnticipationAlert(symbol, ant80Dir, ant80Strategy, price, ant80Reason, Math.max(bullCount, bearCount));
+          }
+        }
+        return;
+      }
 
       // ── Cooldown per asset ───────────────────────────────────────────────────
       const now = Date.now();
