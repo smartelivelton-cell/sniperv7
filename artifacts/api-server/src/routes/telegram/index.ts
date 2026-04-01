@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { notifySignalSent } from "../../lib/heartbeat";
 
 const router: IRouter = Router();
 
@@ -144,6 +145,7 @@ router.post("/notify", async (req, res) => {
 
   try {
     await sendTelegramMessage(message);
+    notifySignalSent();
     res.json({ ok: true });
   } catch (err: any) {
     handleError(res, err);
@@ -312,6 +314,74 @@ router.post("/calm", async (req, res) => {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🎯 <b>Probabilidade de Win: 70%</b>\n` +
     `⛔ Não feche no emocional! Respeite o SL definido.`;
+
+  try {
+    await sendTelegramMessage(message);
+    res.json({ ok: true });
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+// ── /anticipation (80% de confirmação — pré-sinal) ───────────────────────────
+
+router.post("/anticipation", async (req, res) => {
+  const { symbol, side, strategy, price, reason, confluenceCount } = req.body as {
+    symbol: string; side: "LONG" | "SHORT";
+    strategy: string; price: number;
+    reason: string; confluenceCount: number;
+  };
+
+  if (!symbol || !side || !strategy || !price) {
+    res.status(400).json({ error: "symbol, side, strategy and price are required" });
+    return;
+  }
+
+  const dirEmoji = side === "LONG" ? "📈" : "📉";
+  const dirLabel = side === "LONG" ? "🟢 LONG" : "🔴 SHORT";
+
+  const stratEmoji =
+    strategy === "Muralha 200"    ? "🏰" :
+    strategy === "Surfe 200"      ? "🌊" :
+    strategy === "Onda SAR"       ? "📡" :
+    strategy === "Fibonacci 50%"  ? "📐" :
+    strategy === "Exaustão Sniper"? "🎯" :
+    strategy === "Fênix Reversão" ? "🔥" : "⚡";
+
+  const message =
+    `👀 <b>ANTECIPAÇÃO SNIPER — 80% de Confirmação</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🪙 Ativo: <b>${symbol}</b>\n` +
+    `${stratEmoji} Estratégia: <b>${strategy}</b> em formação\n` +
+    `${dirEmoji} Direção esperada: <b>${dirLabel}</b>\n` +
+    `💵 Preço atual: <b>${fmt(price)}</b>\n` +
+    `📊 Confluência: <b>${confluenceCount}/5 TFs</b> alinhados\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔍 <b>Condição em formação:</b>\n${reason}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🎯 <b>Prepare o gatilho!</b>\n` +
+    `⏳ Aguardando confirmação final (volume/vela de fechamento).\n` +
+    `⚠️ <b>NÃO ENTRE AINDA — espere o sinal 100%.</b>`;
+
+  try {
+    await sendTelegramMessage(message);
+    res.json({ ok: true });
+  } catch (err: any) {
+    handleError(res, err);
+  }
+});
+
+// ── /heartbeat (motor operacional — disparado pelo servidor) ──────────────────
+
+router.post("/heartbeat", async (req, res) => {
+  const message =
+    `🔋 <b>Status Sniper: Motor operacional.</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `📡 Monitorando 7 estratégias · OKX SWAP · GPS 5TF\n` +
+    `⏱ Última varredura: ${new Date().toLocaleTimeString("pt-BR")}\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🧘 <i>Paciência é a virtude do Trader!\n` +
+    `O mercado sempre oferece oportunidade — espere a sua.</i>`;
 
   try {
     await sendTelegramMessage(message);
