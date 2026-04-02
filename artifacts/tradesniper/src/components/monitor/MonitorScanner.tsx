@@ -12,7 +12,7 @@ import {
   type Candle,
 } from '@/lib/ema';
 
-const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
+const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX', 'BNB', 'ADA', 'POL', 'XRP'];
 const SCAN_INTERVAL_MS = 30_000;
 const COOLDOWN_MS = 2 * 60 * 1000;
 const RADAR_INTERVAL_MS = 4 * 60 * 60 * 1000;
@@ -178,11 +178,15 @@ async function sendAnticipationAlert(
 const strategyEmoji: Record<string, string> = {
   'Muralha 200': '🏰',
   'Muralha Buffer': '🏰',
+  'Muralha + SAR': '🏰',
   'Surfe 200': '🌊',
   'Onda SAR': '📡',
+  'Pré-Gatilho SAR': '📡',
+  'GPS Full + SAR': '🎯',
   'Fibonacci 50%': '📐',
   'Exaustão Sniper': '🎯',
   'Fênix Reversão': '🔥',
+  'Confirmação 100%': '💯',
   'SINAL MESTRE': '🚀',
 };
 
@@ -228,6 +232,8 @@ export function MonitorScanner() {
   const coinsRef        = useRef<Record<string, CoinState>>({});
   const btcTrendRef     = useRef<'BULL' | 'BEAR' | 'NEUTRAL'>('NEUTRAL');
   const prevM5RsiRef    = useRef<Map<string, number>>(new Map());
+  const prevSarDistRef     = useRef<Map<string, number>>(new Map());
+  const sarPreCooldownRef  = useRef<Map<string, number>>(new Map());
   const intervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const radarRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -272,6 +278,14 @@ export function MonitorScanner() {
 
       // ── Multi-temporal trend (GPS 5TF) ───────────────────────────────────────
       const m15Trend = price > curr200 ? 'BULL' : price < curr200 ? 'BEAR' : 'NEUTRAL' as 'BULL' | 'BEAR' | 'NEUTRAL';
+
+      // ── SAR curvature tracking ────────────────────────────────────────────────
+      const currSarDist = currSar ? Math.abs(price - currSar.sar) / price : 1;
+      const prevSarDist = prevSarDistRef.current.get(symbol) ?? currSarDist;
+      prevSarDistRef.current.set(symbol, currSarDist);
+      const sarCurvatureRatio = prevSarDist > 0 && currSarDist > 0 ? prevSarDist / currSarDist : 1;
+      const sarApproaching80  = sarCurvatureRatio >= 5;
+      const sarNearFlip       = currSarDist < 0.001;
 
       const h4Closes = candlesH4.map(c => c.close);
       const h4ema21  = calculateEMA(h4Closes, 21);
@@ -451,6 +465,45 @@ export function MonitorScanner() {
       // Fallback sem sync (sinal pendente)
       if (sarFlippedUp   && !ema9Inclining && bullGPS) rawSignals.push({ direction: 'LONG',  strategy: 'Onda SAR', leverage: 15, reason: '📡 SAR virou ▲ — aguardando EMA9 sincronizar (alavancagem reduzida)' });
       if (sarFlippedDown && !ema9Declining && bearGPS) rawSignals.push({ direction: 'SHORT', strategy: 'Onda SAR', leverage: 15, reason: '📡 SAR virou ▼ — aguardando EMA9 sincronizar (alavancagem reduzida)' });
+
+      // 3A — Pré-Gatilho SAR (curvatura: gap encolheu ≥80% em ~2 velas M15)
+      if (currSar && sarApproaching80) {
+        const sarPreKey = `${symbol}-${currSar.isLong ? 'SHORT' : 'LONG'}-sar-pre`;
+        const lastSarPre = sarPreCooldownRef.current.get(sarPreKey) ?? 0;
+        if (Date.now() - lastSarPre >= 10 * 60 * 1000) {
+          const shrinkPct = ((1 - 1 / sarCurvatureRatio) * 100).toFixed(0);
+          if (!currSar.isLong && bullGPS && currRsi > 40) {
+            sarPreCooldownRef.current.set(sarPreKey, Date.now());
+            rawSignals.push({ direction: 'LONG', strategy: 'Pré-Gatilho SAR', leverage: 20,
+              reason: `📡 SAR PRÉ-GATILHO ▲: gap encolheu ${shrinkPct}% em 2 velas · Dist: ${(currSarDist * 100).toFixed(3)}% · RSI(6): ${currRsi.toFixed(0)}` });
+          }
+          if (currSar.isLong && bearGPS && currRsi < 60) {
+            sarPreCooldownRef.current.set(sarPreKey, Date.now());
+            rawSignals.push({ direction: 'SHORT', strategy: 'Pré-Gatilho SAR', leverage: 20,
+              reason: `📡 SAR PRÉ-GATILHO ▼: gap encolheu ${shrinkPct}% em 2 velas · Dist: ${(currSarDist * 100).toFixed(3)}% · RSI(6): ${currRsi.toFixed(0)}` });
+          }
+        }
+      }
+
+      // 3B — Muralha + SAR: toca EMA200 + SAR a ≤ 0.1% de virar
+      if (near200 && sarNearFlip && currSar) {
+        if (bullGPS && !currSar.isLong)
+          rawSignals.push({ direction: 'LONG',  strategy: 'Muralha + SAR', leverage: 35,
+            reason: `🏰 EMA200 suporte + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▲ — entrada antecipada antes do flip!` });
+        if (bearGPS && currSar.isLong)
+          rawSignals.push({ direction: 'SHORT', strategy: 'Muralha + SAR', leverage: 35,
+            reason: `🏰 EMA200 resistência + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▼ — entrada antecipada antes do flip!` });
+      }
+
+      // 3C — GPS Full + SAR: GPS 5/5 + SAR ≤ 0.1% de virar → máxima precisão
+      if (sarNearFlip && currSar) {
+        if (bullCount === 5 && !currSar.isLong)
+          rawSignals.push({ direction: 'LONG',  strategy: 'GPS Full + SAR', leverage: 50,
+            reason: `🎯 GPS 5/5 BULL + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▲ — ALTA PRECISÃO! Confluência máxima.` });
+        if (bearCount === 5 && currSar.isLong)
+          rawSignals.push({ direction: 'SHORT', strategy: 'GPS Full + SAR', leverage: 50,
+            reason: `🎯 GPS 5/5 BEAR + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▼ — ALTA PRECISÃO! Confluência máxima.` });
+      }
 
       // 4 — Retração 50% Fibonacci
       const isStrongCandle = prevCandle.volume > avgVol * 3;
