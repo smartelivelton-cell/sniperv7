@@ -64,15 +64,44 @@ export function WinsReport() {
 
   return (
     <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
           📜 Relatório de Hoje
         </h2>
-        {lastUpdated && (
-          <span className="text-xs text-muted-foreground">
-            Atualizado: {lastUpdated.toLocaleTimeString('pt-BR')}
-          </span>
-        )}
+        <div className="flex items-center gap-2 flex-wrap">
+          {lastUpdated && (
+            <span className="text-xs text-muted-foreground">
+              Atualizado: {lastUpdated.toLocaleTimeString('pt-BR')}
+            </span>
+          )}
+          <button
+            onClick={() => {
+              if (wins.length === 0) return;
+              const header = 'Moeda,Estratégia,Direção,Alvo,Lucro %,Horário';
+              const rows = wins.map(w =>
+                `${w.symbol}-USDT,${w.strategy},${w.direction},Alvo ${w.tpLevel},+${w.profitPct.toFixed(2)}%,${w.timestampBR}`
+              );
+              const csv = [header, ...rows].join('\n');
+              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              const today = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+              a.download = `wins_${today}.csv`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            disabled={wins.length === 0}
+            className={cn(
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors',
+              wins.length === 0
+                ? 'border-border text-muted-foreground cursor-not-allowed opacity-50'
+                : 'border-green-500/50 bg-green-500/10 text-green-400 hover:bg-green-500/20'
+            )}
+          >
+            📥 Baixar CSV
+          </button>
+        </div>
       </div>
 
       {/* Summary stats */}

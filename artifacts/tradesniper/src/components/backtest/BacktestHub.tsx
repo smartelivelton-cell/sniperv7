@@ -535,7 +535,7 @@ export function BacktestHub() {
                 key={s.id}
                 onClick={() => setSelectedStrategy(s.id)}
                 className={cn(
-                  "w-full text-left rounded-xl border transition-all p-3",
+                  "w-full text-left rounded-xl border transition-all p-2 sm:p-3",
                   isActive
                     ? "border-primary/60 bg-primary/5 shadow-lg shadow-primary/10"
                     : "border-border bg-card/60 hover:border-primary/30 hover:bg-card/80"

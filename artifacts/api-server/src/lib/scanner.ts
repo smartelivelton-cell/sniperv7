@@ -14,12 +14,13 @@ import {
 } from "./indicators";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const SYMBOLS           = ["BTC", "ETH", "SOL", "DOGE", "AXS", "AVAX", "BNB", "ADA", "POL", "XRP"];
-const SCAN_INTERVAL_MS  = 30_000;
-const COOLDOWN_MS       = 2 * 60 * 1000;
-const ANT_COOLDOWN_MS   = 30 * 60 * 1000;
-const FORCE_COOLDOWN_MS = 5 * 60 * 1000;
-const SAR_PRE_COOLDOWN_MS = 10 * 60 * 1000;
+const SYMBOLS              = ["BTC", "ETH", "SOL", "DOGE", "AXS", "AVAX", "BNB", "ADA", "POL", "XRP"];
+const SCAN_INTERVAL_MS     = 30_000;
+const COOLDOWN_MS          = 2 * 60 * 1000;
+const ANT_COOLDOWN_MS      = 30 * 60 * 1000;
+const FORCE_COOLDOWN_MS    = 5 * 60 * 1000;
+const SAR_PRE_COOLDOWN_MS  = 10 * 60 * 1000;
+const OPPOSITE_COOLDOWN_MS = 10 * 60 * 1000; // no signal flip within 10 min per asset
 const TZ                = "America/Sao_Paulo";
 const OKX_BASE          = "https://www.okx.com/api/v5";
 const BANCA             = 2000;
@@ -59,6 +60,8 @@ const activeSignals   = new Map<string, ActiveSig>();
 // SAR curvature tracking: stores previous SAR gap ratio for each symbol
 const prevSarDistMap    = new Map<string, number>();
 const sarPreCooldownMap = new Map<string, number>();
+// Direction filter: last fired signal direction per symbol
+const lastSignalDirMap  = new Map<string, { direction: Direction; ts: number }>();
 const btcRef = {
   m5: "NEUTRAL" as Trend,
   h4: "NEUTRAL" as Trend,
@@ -724,9 +727,27 @@ async function scanCoin(symbol: string): Promise<void> {
     const { sl, tp1, tp2, tp3 } = calcSlTp(price, direction, atr);
     const id = `${symbol}-${direction}-${Math.floor(now / COOLDOWN_MS)}`;
 
+    // ── Filtro de Direção Majoritária ──────────────────────────────────────────
+    // If the last signal for this symbol was the OPPOSITE direction within 10min,
+    // consult H4 to decide which one wins. H4 BEAR blocks LONG; H4 BULL blocks SHORT.
+    const lastDir = lastSignalDirMap.get(symbol);
+    if (lastDir && now - lastDir.ts < OPPOSITE_COOLDOWN_MS && lastDir.direction !== direction) {
+      if (h4Trend === "BEAR" && direction === "LONG") {
+        logger.info({ symbol, direction, h4Trend }, "Scanner: LONG bloqueado pelo Filtro de Direção (H4 BEAR dentro de 10min)");
+        return;
+      }
+      if (h4Trend === "BULL" && direction === "SHORT") {
+        logger.info({ symbol, direction, h4Trend }, "Scanner: SHORT bloqueado pelo Filtro de Direção (H4 BULL dentro de 10min)");
+        return;
+      }
+      // H4 agrees with new direction → allow override
+      logger.info({ symbol, direction, h4Trend }, "Scanner: sinal oposto liberado — H4 confirma nova direção");
+    }
+
     if (!seenIds.has(id)) {
       seenIds.add(id);
       cooldownMap.set(symbol, now);
+      lastSignalDirMap.set(symbol, { direction, ts: now });
 
       const sig: ActiveSig = {
         id, symbol, direction, price, avgEntry, entry2, sl, tp1, tp2, tp3,
