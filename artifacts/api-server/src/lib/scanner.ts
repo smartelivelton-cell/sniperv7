@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
+import { isLowAssertivityHour } from "./backtestState";
 import {
   calculateEMA,
   calculateRSI,
@@ -157,6 +158,7 @@ function buildSignalMsg(
   mt: MultiTrend,
   confluenceCount: number,
   isHighProb: boolean,
+  lowAssertivity = false,
 ): string {
   const dirEmoji = sig.direction === "LONG" ? "📈" : "📉";
   const dirLabel = sig.direction === "LONG" ? "🟢 LONG" : "🔴 SHORT";
@@ -179,6 +181,7 @@ function buildSignalMsg(
     `${header}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `${isRev ? "⚠️ <b>OPERAÇÃO DE REVERSÃO — ALVO CURTO</b>\n" : ""}` +
+    `${lowAssertivity ? "⚠️ <b>Horário de Baixa Assertividade Histórica — reduza o tamanho da posição!</b>\n" : ""}` +
     `🪙 Ativo: <b>${sig.symbol}-USDT-SWAP</b>\n` +
     `${emoji} Estratégia: <b>${sig.strategy}</b>\n` +
     `⏱ Timeframe: <b>M5/M15</b>${h4Label ? ` · ${h4Label}` : ""}${gpsLine}\n` +
@@ -659,8 +662,12 @@ async function scanCoin(symbol: string): Promise<void> {
       };
       activeSignals.set(id, sig);
 
+      const isSurfe200Signal = strategies.includes("Surfe 200");
+      const lowAssertivity   = isSurfe200Signal && isLowAssertivityHour(symbol);
+      if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
+
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
-      await sendTg(buildSignalMsg(sig, reason, multiTrend, count, isHighProb));
+      await sendTg(buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity));
       notifySignalSent();
     }
   } catch (err: any) {
