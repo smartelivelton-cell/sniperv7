@@ -154,107 +154,24 @@ async function fetchKlines(symbol: string, interval: string, limit = 300): Promi
   return candles;
 }
 
-// ── Telegram API calls ────────────────────────────────────────────────────────
+// ── Telegram API calls — desativadas no browser (servidor envia 24/7) ──────────
+// O scanner server-side é responsável por todos os alertas do Telegram.
+// As funções abaixo são mantidas apenas para compatibilidade com o display local.
 
-async function sendTelegramAlert(signal: SignalAlert) {
-  try {
-    await fetch(`${BASE}/api/telegram/notify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        symbol: `${signal.symbol}-USDT-SWAP`,
-        side: signal.direction,
-        price: signal.price,
-        entry2: signal.ema21,
-        avgEntry: signal.avgEntry,
-        sl: signal.sl,
-        tp1: signal.tp1,
-        tp2: signal.tp2,
-        tp3: signal.tp3,
-        strategy: signal.strategy,
-        strategies: signal.strategies,
-        leverage: signal.leverage,
-        rsi6: signal.rsi6,
-        h4Trend: signal.h4Trend,
-        multiTrend: signal.multiTrend,
-        confluenceCount: signal.confluenceCount,
-        isHighProbability: signal.isHighProbability,
-        reason: signal.reason,
-      }),
-    });
-  } catch (_) {}
-}
-
-async function sendWinAlert(signal: SignalAlert, tpLevel: 1 | 2 | 3) {
-  try {
-    await fetch(`${BASE}/api/telegram/win`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        symbol: `${signal.symbol}-USDT-SWAP`,
-        side: signal.direction,
-        entry: signal.price,
-        entry2: signal.ema21,
-        avgEntry: signal.avgEntry,
-        tp1: signal.tp1,
-        tp2: signal.tp2,
-        tp3: signal.tp3,
-        tpLevel,
-        strategy: signal.strategy,
-        leverage: signal.leverage,
-      }),
-    });
-  } catch (_) {}
-}
-
-async function sendActivationMessage() {
-  try {
-    await fetch(`${BASE}/api/telegram/activate`, { method: 'POST' });
-  } catch (_) {}
-}
-
-async function sendRetainedAlert(symbol: string, direction: string, price: number, strategies: string[]) {
-  try {
-    await fetch(`${BASE}/api/telegram/retained`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbol: `${symbol}-USDT-SWAP`, side: direction, price, strategies }),
-    });
-  } catch (_) {}
-}
-
-async function sendCalmMessage(signal: SignalAlert, currentPrice: number) {
-  try {
-    await fetch(`${BASE}/api/telegram/calm`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        symbol: `${signal.symbol}-USDT-SWAP`,
-        side: signal.direction,
-        entry: signal.avgEntry,
-        currentPrice,
-        sl: signal.sl,
-      }),
-    });
-  } catch (_) {}
-}
-
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function sendTelegramAlert(_signal: SignalAlert) {}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function sendWinAlert(_signal: SignalAlert, _tpLevel: 1 | 2 | 3) {}
+async function sendActivationMessage() {}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function sendRetainedAlert(_symbol: string, _direction: string, _price: number, _strategies: string[]) {}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+async function sendCalmMessage(_signal: SignalAlert, _currentPrice: number) {}
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function sendAnticipationAlert(
-  symbol: string,
-  side: 'LONG' | 'SHORT',
-  strategy: string,
-  price: number,
-  reason: string,
-  confluenceCount: number,
-) {
-  try {
-    await fetch(`${BASE}/api/telegram/anticipation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ symbol, side, strategy, price, reason, confluenceCount }),
-    });
-  } catch (_) {}
-}
+  _symbol: string, _side: 'LONG' | 'SHORT', _strategy: string,
+  _price: number, _reason: string, _confluenceCount: number,
+) {}
 
 // ── Strategy emoji map ────────────────────────────────────────────────────────
 
@@ -848,11 +765,15 @@ export function MonitorScanner() {
           <h2 className="text-sm font-black text-primary tracking-widest">TRADESNIPER AI PRO · OKX SWAP · 7 ESTRATÉGIAS · GPS 5TF</h2>
           <p className="text-xs text-muted-foreground">D1·H4·H1·M15·M5 · EMA 9/21/200 · RSI(6) · SAR · Fib · Muralha Buffer · Fênix · BTC Termômetro</p>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
           {lastScan && <span className="text-xs text-muted-foreground">Última: {lastScan.toLocaleTimeString('pt-BR')}</span>}
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-blue-900/40 border border-blue-500/50 text-blue-300 text-[10px] font-black">
+            <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse inline-block" />
+            SERVIDOR 24/7
+          </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-green-900/40 border border-green-500/50 text-green-300 text-xs font-black">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse inline-block" />
-            ATIVO · {nextScanIn}s
+            DISPLAY · {nextScanIn}s
           </div>
         </div>
       </div>
