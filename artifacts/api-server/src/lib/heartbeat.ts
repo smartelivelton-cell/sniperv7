@@ -22,7 +22,7 @@ async function sendHeartbeat(): Promise<void> {
   }
 
   const now = new Date();
-  const timeStr = now.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+  const timeStr = now.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 
   const text =
     `🔋 <b>Status Sniper: Motor operacional.</b>\n` +
