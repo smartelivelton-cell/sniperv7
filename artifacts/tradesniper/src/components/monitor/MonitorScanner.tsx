@@ -14,7 +14,7 @@ import {
 
 const MONITOR_SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 const SCAN_INTERVAL_MS = 30_000;
-const COOLDOWN_MS = 10 * 60 * 1000;
+const COOLDOWN_MS = 2 * 60 * 1000;
 const RADAR_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 // Cache to reduce OKX API calls for slow-moving timeframes
@@ -310,6 +310,7 @@ export function MonitorScanner() {
   const calmSentRef     = useRef<Set<string>>(new Set());
   const coinsRef        = useRef<Record<string, CoinState>>({});
   const btcTrendRef     = useRef<'BULL' | 'BEAR' | 'NEUTRAL'>('NEUTRAL');
+  const prevM5RsiRef    = useRef<Map<string, number>>(new Map());
   const intervalRef     = useRef<ReturnType<typeof setInterval> | null>(null);
   const radarRef        = useRef<ReturnType<typeof setInterval> | null>(null);
   const countdownRef    = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -398,8 +399,18 @@ export function MonitorScanner() {
       const ema9Inclining = ema9Slope > curr9 * 0.0002;
       const ema9Declining = ema9Slope < -curr9 * 0.0002;
 
-      // ── Update BTC reference trend ───────────────────────────────────────────
-      if (symbol === 'BTC') btcTrendRef.current = m15Trend;
+      // ── M5 RSI + Gatilho de Volatilidade ─────────────────────────────────────
+      const m5Rsi6arr  = calculateRSI(m5Closes, 6);
+      const m5RsiLast  = m5Rsi6arr[m5Rsi6arr.length - 1] ?? 50;
+      const prevM5Rsi  = prevM5RsiRef.current.get(symbol) ?? m5RsiLast;
+      const rsiSpiked  = Math.abs(m5RsiLast - prevM5Rsi) >= 15;
+      const m5AvgVol   = calculateAvgVolume(candles5m, 20);
+      const m5LastIdx  = candles5m.length - 1;
+      const m5VolDoubled = (candles5m[m5LastIdx]?.volume ?? 0) > m5AvgVol * 2;
+      const volatilityTrigger = rsiSpiked || m5VolDoubled;
+
+      // ── Update BTC reference trend (M5) ─────────────────────────────────────
+      if (symbol === 'BTC') btcTrendRef.current = m5Trend;
 
       // ── Update coin state ────────────────────────────────────────────────────
       const bearCount = [multiTrend.d1, multiTrend.h4, multiTrend.h1, multiTrend.m15, multiTrend.m5].filter(t => t === 'BEAR').length;
@@ -550,6 +561,16 @@ export function MonitorScanner() {
       const volSpike30  = lastCandle.volume > avgVol * 1.3;
       if (farBelow && currRsi < 20 && greenCandle && volSpike30)
         rawSignals.push({ direction: 'LONG', strategy: 'Fênix Reversão', leverage: 25, reason: `🔥 REVERSÃO: ${((curr200 - price) / curr200 * 100).toFixed(1)}% abaixo EMA200 | RSI(6): ${currRsi.toFixed(0)} | Vol: ${(lastCandle.volume / avgVol).toFixed(1)}x ⚠️ ALVO CURTO` });
+
+      // 8 — Gatilho de Volatilidade M5 (ignora espera de fechamento de TFs maiores)
+      if (volatilityTrigger && m5Trend !== 'NEUTRAL') {
+        const vtDir    = m5Trend === 'BULL' ? 'LONG' : 'SHORT' as 'LONG' | 'SHORT';
+        const vtReason = rsiSpiked
+          ? `⚡ RSI(6) M5 deslocou ${Math.abs(m5RsiLast - prevM5Rsi).toFixed(0)} pts (${prevM5Rsi.toFixed(0)} → ${m5RsiLast.toFixed(0)}) — Momentum explosivo`
+          : `⚡ Volume M5 ${(( candles5m[m5LastIdx]?.volume ?? 0) / m5AvgVol).toFixed(1)}x acima da média — Pressão ${vtDir === 'LONG' ? 'compradora' : 'vendedora'} confirmada`;
+        rawSignals.push({ direction: vtDir, strategy: 'Confirmação 100%', leverage: 50, reason: vtReason });
+      }
+      prevM5RsiRef.current.set(symbol, m5RsiLast);
 
       // ── V7: Antecipação 80% ───────────────────────────────────────────────────
       const ANTICIPATION_COOLDOWN_MS = 30 * 60 * 1000;

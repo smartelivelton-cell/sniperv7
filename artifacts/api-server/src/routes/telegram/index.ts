@@ -84,12 +84,13 @@ router.post("/notify", async (req, res) => {
   const entry2val   = entry2 ?? price;
 
   const stratEmoji =
-    strategy === "Muralha 200"   ? "🏰" :
-    strategy === "Muralha Buffer"? "🏰" :
-    strategy === "Surfe 200"     ? "🌊" :
-    strategy === "Onda SAR"      ? "📡" :
-    strategy === "Fibonacci 50%" ? "📐" :
-    strategy === "Exaustão Sniper"? "🎯" :
+    strategy === "Muralha 200"      ? "🏰" :
+    strategy === "Muralha Buffer"   ? "🏰" :
+    strategy === "Surfe 200"        ? "🌊" :
+    strategy === "Onda SAR"         ? "📡" :
+    strategy === "Fibonacci 50%"    ? "📐" :
+    strategy === "Exaustão Sniper"  ? "🎯" :
+    strategy === "Confirmação 100%" ? "💯" :
     isReversal ? "🔥" :
     isMaster ? "🚀" : "⚡";
 
@@ -250,7 +251,7 @@ router.post("/radar", async (req, res) => {
     return `🪙 <b>${c.symbol}:</b> D1(${tfDot(c.d1)}) H4(${tfDot(c.h4)}) H1(${tfDot(c.h1)}) M15(${tfDot(c.m15)}) M5(${tfDot(c.m5)}) → ${status}`;
   });
 
-  const now     = new Date().toLocaleTimeString("pt-BR");
+  const now     = new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" });
   const message =
     `📊 <b>RELATÓRIO DE RADAR SNIPER</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
@@ -283,7 +284,7 @@ router.post("/retained", async (req, res) => {
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🌡️ <b>Tendência da Altcoin é queda, mas BTC está em alta.</b>\n` +
     `Aguardando alinhamento do mestre para confirmar o SHORT.\n` +
-    `→ Só entre quando BTC também mostrar fraqueza no M15.`;
+    `→ Só entre quando BTC também mostrar fraqueza no M5.`;
 
   try {
     await sendTelegramMessage(message);
@@ -378,7 +379,7 @@ router.post("/heartbeat", async (req, res) => {
     `🔋 <b>Status Sniper: Motor operacional.</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📡 Monitorando 7 estratégias · OKX SWAP · GPS 5TF\n` +
-    `⏱ Última varredura: ${new Date().toLocaleTimeString("pt-BR")}\n` +
+    `⏱ Última varredura: ${new Date().toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo" })}\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🧘 <i>Paciência é a virtude do Trader!\n` +
     `O mercado sempre oferece oportunidade — espere a sua.</i>`;
