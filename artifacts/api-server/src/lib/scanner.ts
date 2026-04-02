@@ -1,6 +1,7 @@
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
 import { isLowAssertivityHour } from "./backtestState";
+import { logWin } from "./winsLog";
 import {
   calculateEMA,
   calculateRSI,
@@ -330,16 +331,28 @@ async function checkActiveSignals(symbol: string, price: number): Promise<void> 
     }
     if (!sig.tp1Hit && ((isLong && price >= sig.tp1) || (!isLong && price <= sig.tp1))) {
       sig.tp1Hit = true;
+      const tp1Pct = absPct(sig.avgEntry, sig.tp1);
+      logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
+        tpLevel: 1, profitPct: tp1Pct, leverage: sig.leverage,
+        avgEntry: sig.avgEntry, tpPrice: sig.tp1 });
       await sendTg(buildWinMsg(sig, 1));
       notifySignalSent();
     }
     if (sig.tp1Hit && !sig.tp2Hit && ((isLong && price >= sig.tp2) || (!isLong && price <= sig.tp2))) {
       sig.tp2Hit = true;
+      const tp2Pct = absPct(sig.avgEntry, sig.tp2);
+      logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
+        tpLevel: 2, profitPct: tp2Pct, leverage: sig.leverage,
+        avgEntry: sig.avgEntry, tpPrice: sig.tp2 });
       await sendTg(buildWinMsg(sig, 2));
       notifySignalSent();
     }
     if (sig.tp2Hit && !sig.tp3Hit && ((isLong && price >= sig.tp3) || (!isLong && price <= sig.tp3))) {
       sig.tp3Hit = true;
+      const tp3Pct = absPct(sig.avgEntry, sig.tp3);
+      logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
+        tpLevel: 3, profitPct: tp3Pct, leverage: sig.leverage,
+        avgEntry: sig.avgEntry, tpPrice: sig.tp3 });
       await sendTg(buildWinMsg(sig, 3));
       notifySignalSent();
       activeSignals.delete(id);
