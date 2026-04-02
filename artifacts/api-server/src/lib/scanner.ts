@@ -13,11 +13,12 @@ import {
 } from "./indicators";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const SYMBOLS           = ["BTC", "ETH", "SOL", "DOGE", "AXS", "AVAX"];
+const SYMBOLS           = ["BTC", "ETH", "SOL", "DOGE", "AXS", "AVAX", "BNB", "ADA", "POL", "XRP"];
 const SCAN_INTERVAL_MS  = 30_000;
 const COOLDOWN_MS       = 2 * 60 * 1000;
 const ANT_COOLDOWN_MS   = 30 * 60 * 1000;
 const FORCE_COOLDOWN_MS = 5 * 60 * 1000;
+const SAR_PRE_COOLDOWN_MS = 10 * 60 * 1000;
 const TZ                = "America/Sao_Paulo";
 const OKX_BASE          = "https://www.okx.com/api/v5";
 const BANCA             = 2000;
@@ -54,6 +55,9 @@ const forceVolMap     = new Map<string, number>();
 const prevM5RsiMap    = new Map<string, number>();
 const prevEma200Map   = new Map<string, number>();
 const activeSignals   = new Map<string, ActiveSig>();
+// SAR curvature tracking: stores previous SAR gap ratio for each symbol
+const prevSarDistMap    = new Map<string, number>();
+const sarPreCooldownMap = new Map<string, number>();
 const btcRef = {
   m5: "NEUTRAL" as Trend,
   h4: "NEUTRAL" as Trend,
@@ -83,8 +87,11 @@ function confluenceScore(mt: MultiTrend, dir: Direction): number {
 const STRAT_EMOJI: Record<string, string> = {
   "Muralha 200":       "🏰",
   "Muralha Buffer":    "🏰",
+  "Muralha + SAR":     "🏰",
   "Surfe 200":         "🌊",
   "Onda SAR":          "📡",
+  "Pré-Gatilho SAR":   "📡",
+  "GPS Full + SAR":    "🎯",
   "Fibonacci 50%":     "📐",
   "Exaustão Sniper":   "🎯",
   "Fênix Reversão":    "🔥",
@@ -378,6 +385,16 @@ async function scanCoin(symbol: string): Promise<void> {
 
     const m15Trend: Trend = price > curr200 ? "BULL" : price < curr200 ? "BEAR" : "NEUTRAL";
 
+    // ── SAR curvature tracking ────────────────────────────────────────────────
+    // Distance = |price - sar| / price (normalised so we can compare across coins)
+    const currSarDist = currSar ? Math.abs(price - currSar.sar) / price : 1;
+    const prevSarDist = prevSarDistMap.get(symbol) ?? currSarDist;
+    prevSarDistMap.set(symbol, currSarDist);
+    // curvatureRatio > 1 means gap is shrinking; ≥ 5 means 80%+ shrinkage in 1 scan cycle (~2 M15 candles)
+    const sarCurvatureRatio = prevSarDist > 0 && currSarDist > 0 ? prevSarDist / currSarDist : 1;
+    const sarApproaching80  = sarCurvatureRatio >= 5;  // gap shrank ≥80%
+    const sarNearFlip       = currSarDist < 0.001;      // within 0.1% of price
+
     // ── H4 trend ─────────────────────────────────────────────────────────────
     const h4Closes = cH4.map(c => c.close);
     const h4ema21  = calculateEMA(h4Closes, 21);
@@ -529,6 +546,48 @@ async function scanCoin(symbol: string): Promise<void> {
       rawSignals.push({ direction: "LONG",  strategy: "Onda SAR", leverage: 15, reason: "📡 SAR virou ▲ — aguardando EMA9 sincronizar (alavancagem reduzida)" });
     if (sarFlippedDown && !ema9Declining && bearGPS)
       rawSignals.push({ direction: "SHORT", strategy: "Onda SAR", leverage: 15, reason: "📡 SAR virou ▼ — aguardando EMA9 sincronizar (alavancagem reduzida)" });
+
+    // 3A — Pré-Gatilho SAR (curvatura: gap encolheu ≥80% em ~2 velas M15)
+    // currSar.isLong=false → SAR bearish (acima do preço) → se gap está encolhendo, price subindo → pré-LONG
+    // currSar.isLong=true  → SAR bullish (abaixo do preço) → se gap está encolhendo, price caindo → pré-SHORT
+    if (currSar && sarApproaching80) {
+      const sarPreKey = `${symbol}-${currSar.isLong ? "SHORT" : "LONG"}-sar-pre`;
+      const lastSarPre = sarPreCooldownMap.get(sarPreKey) ?? 0;
+      if (Date.now() - lastSarPre >= SAR_PRE_COOLDOWN_MS) {
+        const shrinkPct = ((1 - 1 / sarCurvatureRatio) * 100).toFixed(0);
+        if (!currSar.isLong && bullGPS && currRsi > 40) {
+          sarPreCooldownMap.set(sarPreKey, Date.now());
+          rawSignals.push({ direction: "LONG", strategy: "Pré-Gatilho SAR", leverage: 20,
+            reason: `📡 SAR PRÉ-GATILHO ▲: gap encolheu ${shrinkPct}% em 2 velas · Dist: ${(currSarDist * 100).toFixed(3)}% · RSI(6): ${currRsi.toFixed(0)}` });
+        }
+        if (currSar.isLong && bearGPS && currRsi < 60) {
+          sarPreCooldownMap.set(sarPreKey, Date.now());
+          rawSignals.push({ direction: "SHORT", strategy: "Pré-Gatilho SAR", leverage: 20,
+            reason: `📡 SAR PRÉ-GATILHO ▼: gap encolheu ${shrinkPct}% em 2 velas · Dist: ${(currSarDist * 100).toFixed(3)}% · RSI(6): ${currRsi.toFixed(0)}` });
+        }
+      }
+    }
+
+    // 3B — Muralha + SAR Hibridização: preço toca EMA200 + SAR a ≤ 0.1% de virar
+    // Entra antecipado pois a Muralha serve como suporte/resistência real
+    if (near200 && sarNearFlip && currSar) {
+      if (bullGPS && !currSar.isLong)
+        rawSignals.push({ direction: "LONG",  strategy: "Muralha + SAR", leverage: 35,
+          reason: `🏰 EMA200 suporte + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▲ — entrada antecipada antes do flip!` });
+      if (bearGPS && currSar.isLong)
+        rawSignals.push({ direction: "SHORT", strategy: "Muralha + SAR", leverage: 35,
+          reason: `🏰 EMA200 resistência + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▼ — entrada antecipada antes do flip!` });
+    }
+
+    // 3C — GPS Full + SAR: GPS 5/5 + SAR ≤ 0.1% de virar → máxima precisão
+    if (sarNearFlip && currSar) {
+      if (bullCount === 5 && !currSar.isLong)
+        rawSignals.push({ direction: "LONG",  strategy: "GPS Full + SAR", leverage: 50,
+          reason: `🎯 GPS 5/5 BULL + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▲ — ALTA PRECISÃO! Confluência máxima.` });
+      if (bearCount === 5 && currSar.isLong)
+        rawSignals.push({ direction: "SHORT", strategy: "GPS Full + SAR", leverage: 50,
+          reason: `🎯 GPS 5/5 BEAR + SAR a ${(currSarDist * 100).toFixed(3)}% de virar ▼ — ALTA PRECISÃO! Confluência máxima.` });
+    }
 
     // 4 — Fibonacci 50%
     const isStrongCandle = prevCandle.volume > avgVol * 3;
