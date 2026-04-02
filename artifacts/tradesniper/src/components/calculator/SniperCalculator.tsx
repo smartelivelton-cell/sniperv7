@@ -146,8 +146,8 @@ export function SniperCalculator({ symbol, onSymbolChange, symbols, aiResult, on
         </div>
       )}
 
-      {/* Action Buttons */}
-      <div className="grid grid-cols-2 gap-3 mt-auto pt-4">
+      {/* Action Buttons — sticky at bottom of scroll container on mobile */}
+      <div className="sticky bottom-0 z-10 grid grid-cols-2 gap-3 pt-3 pb-1 -mx-5 px-5 bg-card/95 backdrop-blur-sm border-t border-border/50 sm:relative sm:bottom-auto sm:z-auto sm:mx-0 sm:px-0 sm:bg-transparent sm:backdrop-blur-none sm:border-0 sm:mt-auto sm:pt-4 sm:pb-0">
         <Button 
           variant="success" 
           size="lg"

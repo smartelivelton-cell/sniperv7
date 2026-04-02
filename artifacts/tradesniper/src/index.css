@@ -138,3 +138,14 @@
 .box-glow-primary {
   box-shadow: 0 0 15px hsla(var(--primary) / 0.15), inset 0 0 15px hsla(var(--primary) / 0.05);
 }
+
+/* Auto-zoom: scale the entire UI to 80% on very small screens (<500px)
+   so the dashboard fits without the user needing to manually zoom out. */
+@media (max-width: 499px) {
+  #root {
+    zoom: 0.8;
+    width: calc(100% / 0.8);
+    max-width: 100vw;
+    overflow-x: hidden;
+  }
+}
