@@ -116,6 +116,15 @@
   background: hsl(var(--muted-foreground));
 }
 
+/* Hide scrollbar (for nav on mobile) */
+.scrollbar-none {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
 /* Base utility classes for glowing text */
 .text-glow-primary {
   text-shadow: 0 0 10px hsla(var(--primary) / 0.5);

@@ -9,20 +9,22 @@ import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
 import { MonitorScanner } from '@/components/monitor/MonitorScanner';
 import { BacktestHub } from '@/components/backtest/BacktestHub';
+import { WinsReport } from '@/components/wins/WinsReport';
 import { cn } from '@/lib/utils';
 import type { AnalysisResult } from '@workspace/api-client-react/src/generated/api.schemas';
 import { useCreateTrade } from '@workspace/api-client-react';
-import { LayoutDashboard, Eye, BarChart2, Bot, Radar, Calculator } from 'lucide-react';
+import { LayoutDashboard, Eye, BarChart2, Bot, Radar, Calculator, ScrollText } from 'lucide-react';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 
 const TABS = [
-  { id: 'command', label: 'Central de Comando', icon: LayoutDashboard },
-  { id: 'vision', label: 'Visão IA', icon: Eye },
-  { id: 'backtest', label: 'Hub Estatísticas', icon: BarChart2 },
-  { id: 'calculator', label: 'Calculadora', icon: Calculator },
-  { id: 'scanner', label: 'Scanner V7', icon: Radar },
-  { id: 'copilot', label: 'Copiloto Chat', icon: Bot },
+  { id: 'command',    label: 'Comando',     labelFull: 'Central de Comando',   icon: LayoutDashboard },
+  { id: 'vision',     label: 'IA',          labelFull: 'Visão IA',             icon: Eye },
+  { id: 'backtest',   label: 'Stats',       labelFull: 'Hub Estatísticas',     icon: BarChart2 },
+  { id: 'calculator', label: 'Calc',        labelFull: 'Calculadora',          icon: Calculator },
+  { id: 'scanner',    label: 'Scanner',     labelFull: 'Scanner V7',           icon: Radar },
+  { id: 'wins',       label: 'Relatório',   labelFull: 'Relatório de Hoje',    icon: ScrollText },
+  { id: 'copilot',    label: 'Copiloto',    labelFull: 'Copiloto Chat',        icon: Bot },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -63,10 +65,11 @@ export default function Terminal() {
   };
 
   return (
-    <div className="flex flex-col h-screen max-h-screen bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-[100dvh] bg-background text-foreground overflow-hidden">
       <Header />
 
-      <nav className="flex bg-card/80 border-b border-border shrink-0 px-2">
+      {/* ── Tab nav — horizontally scrollable on mobile ── */}
+      <nav className="flex bg-card/80 border-b border-border shrink-0 overflow-x-auto scrollbar-none">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -75,19 +78,23 @@ export default function Terminal() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-2 px-5 py-3 text-sm font-bold transition-all border-b-2 whitespace-nowrap",
+                "flex items-center gap-1.5 px-3 py-2.5 text-xs sm:px-5 sm:py-3 sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
                 isActive
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40"
               )}
             >
-              <Icon className="w-4 h-4" />
-              {tab.label}
+              <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
+              <span className="hidden sm:inline">{tab.labelFull}</span>
+              <span className="sm:hidden">{tab.label}</span>
               {tab.id === 'vision' && aiResult && (
-                <span className="ml-1 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               )}
               {tab.id === 'scanner' && (
-                <span className="ml-1 w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+              )}
+              {tab.id === 'wins' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
               )}
             </button>
           );
@@ -96,7 +103,7 @@ export default function Terminal() {
 
       {/* ── ABA 1: CENTRAL DE COMANDO ── */}
       <div className={cn("flex-1 flex flex-col overflow-hidden", activeTab !== 'command' && "hidden")}>
-        <div className="flex-1 flex flex-col overflow-hidden p-2 pb-1">
+        <div className="flex-1 flex flex-col overflow-hidden p-1.5 sm:p-2 pb-1">
           <div className="flex-1 flex flex-col rounded-xl overflow-hidden border border-border bg-card relative">
             <div className="flex bg-secondary/50 border-b border-border px-2 gap-1 overflow-x-auto shrink-0">
               {SYMBOLS.map(s => (
@@ -104,13 +111,13 @@ export default function Terminal() {
                   key={s}
                   onClick={() => setActiveSymbol(s)}
                   className={cn(
-                    "px-4 py-2 text-sm font-bold rounded-t-lg transition-colors border border-b-0 shrink-0",
+                    "px-2 py-1.5 sm:px-4 sm:py-2 text-xs sm:text-sm font-bold rounded-t-lg transition-colors border border-b-0 shrink-0",
                     activeSymbol === s
                       ? "bg-card text-primary border-border"
                       : "bg-background text-muted-foreground border-transparent hover:bg-secondary hover:text-foreground"
                   )}
                 >
-                  {s}-USDT-SWAP
+                  {s}
                 </button>
               ))}
             </div>
@@ -120,10 +127,10 @@ export default function Terminal() {
           </div>
         </div>
 
-        <div className="shrink-0 px-2 pb-2 z-10">
+        <div className="shrink-0 px-1.5 sm:px-2 pb-1.5 sm:pb-2 z-10">
           <button
             onClick={() => setHistoryOpen(o => !o)}
-            className="w-full flex items-center justify-between px-4 py-2 bg-card border border-border rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
+            className="w-full flex items-center justify-between px-3 py-2 sm:px-4 bg-card border border-border rounded-lg text-xs font-bold text-muted-foreground hover:text-foreground hover:bg-secondary/40 transition-colors"
           >
             <span>📋 HISTÓRICO DO DIA</span>
             <span>{historyOpen ? '▲ Fechar' : '▼ Expandir'}</span>
@@ -137,8 +144,8 @@ export default function Terminal() {
       </div>
 
       {/* ── ABA 2: VISÃO IA ── */}
-      <div className={cn("flex-1 flex overflow-hidden p-2 gap-2", activeTab !== 'vision' && "hidden")}>
-        <div className="w-1/2 overflow-y-auto">
+      <div className={cn("flex-1 flex flex-col sm:flex-row overflow-hidden p-1.5 sm:p-2 gap-2", activeTab !== 'vision' && "hidden")}>
+        <div className="w-full sm:w-1/2 overflow-y-auto">
           <ImageUploader
             symbol={activeSymbol}
             currentPrice={0}
@@ -151,7 +158,7 @@ export default function Terminal() {
             onAnalysisError={handleAnalysisError}
           />
         </div>
-        <div className="w-1/2 overflow-y-auto">
+        <div className="w-full sm:w-1/2 overflow-y-auto">
           <AnalysisResultPanel result={aiResult} isLoading={isAnalyzing} />
         </div>
       </div>
@@ -162,8 +169,8 @@ export default function Terminal() {
       </div>
 
       {/* ── ABA 4: CALCULADORA & METAS ── */}
-      <div className={cn("flex-1 flex overflow-hidden p-2 gap-2", activeTab !== 'calculator' && "hidden")}>
-        <div className="w-[45%] overflow-y-auto">
+      <div className={cn("flex-1 flex flex-col sm:flex-row overflow-hidden p-1.5 sm:p-2 gap-2", activeTab !== 'calculator' && "hidden")}>
+        <div className="w-full sm:w-[45%] overflow-y-auto">
           <SniperCalculator
             symbol={activeSymbol}
             onSymbolChange={setActiveSymbol}
@@ -172,19 +179,24 @@ export default function Terminal() {
             onExecuteTrade={handleExecuteTrade}
           />
         </div>
-        <div className="w-[55%] overflow-y-auto">
+        <div className="w-full sm:w-[55%] overflow-y-auto">
           <GoalsTracker />
         </div>
       </div>
 
-      {/* ── ABA 4: SCANNER ── */}
+      {/* ── ABA 5: SCANNER ── */}
       <div className={cn("flex-1 flex overflow-hidden", activeTab !== 'scanner' && "hidden")}>
         <MonitorScanner />
       </div>
 
-      {/* ── ABA 5: COPILOTO CHAT ── */}
-      <div className={cn("flex-1 flex overflow-hidden p-2", activeTab !== 'copilot' && "hidden")}>
-        <div className="flex-1 max-w-3xl mx-auto">
+      {/* ── ABA 6: RELATÓRIO DE WINS ── */}
+      <div className={cn("flex-1 flex overflow-hidden", activeTab !== 'wins' && "hidden")}>
+        <WinsReport />
+      </div>
+
+      {/* ── ABA 7: COPILOTO CHAT ── */}
+      <div className={cn("flex-1 flex overflow-hidden p-1.5 sm:p-2", activeTab !== 'copilot' && "hidden")}>
+        <div className="flex-1 max-w-3xl mx-auto w-full">
           <CopilotSidebar lastAnalysis={aiResult} />
         </div>
       </div>
