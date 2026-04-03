@@ -78,15 +78,17 @@ export default function Terminal() {
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                "flex items-center gap-1.5 px-3 py-2.5 text-xs sm:px-5 sm:py-3 sm:text-sm font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
+                "flex items-center justify-center gap-1.5 px-3 py-2.5 min-[480px]:px-4 sm:px-5 sm:py-3 sm:text-sm text-xs font-bold transition-all border-b-2 whitespace-nowrap shrink-0",
                 isActive
                   ? "border-primary text-primary bg-primary/5"
                   : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/40"
               )}
             >
-              <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
-              <span className="hidden sm:inline">{tab.labelFull}</span>
-              <span className="sm:hidden">{tab.label}</span>
+              <Icon className="w-4 h-4 shrink-0" />
+              {/* short label: visible 480-639px */}
+              <span className="hidden min-[480px]:inline sm:hidden leading-none">{tab.label}</span>
+              {/* full label: visible 640px+ */}
+              <span className="hidden sm:inline leading-none">{tab.labelFull}</span>
               {tab.id === 'vision' && aiResult && (
                 <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
               )}
