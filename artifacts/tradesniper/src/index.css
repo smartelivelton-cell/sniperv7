@@ -139,12 +139,21 @@
   box-shadow: 0 0 15px hsla(var(--primary) / 0.15), inset 0 0 15px hsla(var(--primary) / 0.05);
 }
 
-/* Auto-zoom: scale the entire UI to 80% on very small screens (<500px)
-   so the dashboard fits without the user needing to manually zoom out. */
-@media (max-width: 499px) {
+/* Mobile scale: on screens < 360px (very small phones), use transform scale
+   so the full dashboard fits without the user manually zooming out.
+   transform-origin: top left + width 125% compensates for the reduced layout size. */
+@media (max-width: 359px) {
   #root {
-    zoom: 0.8;
-    width: calc(100% / 0.8);
+    transform-origin: 0 0;
+    transform: scale(0.82);
+    width: calc(100% / 0.82);
+    min-height: calc(100dvh / 0.82);
+    overflow-x: hidden;
+  }
+}
+/* Prevent any horizontal scroll on all mobile screens */
+@media (max-width: 639px) {
+  body, #root {
     max-width: 100vw;
     overflow-x: hidden;
   }

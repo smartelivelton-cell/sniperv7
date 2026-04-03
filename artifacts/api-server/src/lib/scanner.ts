@@ -20,7 +20,9 @@ const COOLDOWN_MS          = 2 * 60 * 1000;
 const ANT_COOLDOWN_MS      = 30 * 60 * 1000;
 const FORCE_COOLDOWN_MS    = 5 * 60 * 1000;
 const SAR_PRE_COOLDOWN_MS  = 10 * 60 * 1000;
-const OPPOSITE_COOLDOWN_MS = 10 * 60 * 1000; // no signal flip within 10 min per asset
+const OPPOSITE_COOLDOWN_MS  = 10 * 60 * 1000; // no signal flip within 10 min per asset
+const CASCADE_COOLDOWN_MS   = 30 * 60 * 1000; // cascade alert per altcoin
+const OB_CACHE_TTL          = 30_000;          // order book cache 30s
 const TZ                = "America/Sao_Paulo";
 const OKX_BASE          = "https://www.okx.com/api/v5";
 const BANCA             = 2000;
@@ -62,6 +64,10 @@ const prevSarDistMap    = new Map<string, number>();
 const sarPreCooldownMap = new Map<string, number>();
 // Direction filter: last fired signal direction per symbol
 const lastSignalDirMap  = new Map<string, { direction: Direction; ts: number }>();
+// Cascade monitor cooldown (per altcoin)
+const cascadeCooldownMap = new Map<string, number>();
+// Order book cache (for P50 liquidity analysis)
+const orderBookCache = new Map<string, { bids: [number,number][]; asks: [number,number][]; ts: number }>();
 const btcRef = {
   m5: "NEUTRAL" as Trend,
   h4: "NEUTRAL" as Trend,
@@ -138,6 +144,50 @@ async function fetchKlines(symbol: string, bar: string, limit: number): Promise<
   return candles;
 }
 
+// ── Order Book fetch (for P50 liquidity analysis) ──────────────────────────────
+async function fetchOrderBook(symbol: string): Promise<{ bids: [number,number][]; asks: [number,number][] } | null> {
+  const cached = orderBookCache.get(symbol);
+  if (cached && Date.now() - cached.ts < OB_CACHE_TTL) return cached;
+  try {
+    const instId = `${symbol}-USDT-SWAP`;
+    const url    = `${OKX_BASE}/market/books?instId=${instId}&sz=20`;
+    const res    = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5_000) });
+    if (!res.ok) return null;
+    const json: any = await res.json();
+    if (json.code !== "0" || !json.data?.[0]) return null;
+    const raw  = json.data[0];
+    const bids = (raw.bids as string[][]).map(b => [parseFloat(b[0]), parseFloat(b[1])] as [number,number]);
+    const asks = (raw.asks as string[][]).map(a => [parseFloat(a[0]), parseFloat(a[1])] as [number,number]);
+    orderBookCache.set(symbol, { bids, asks, ts: Date.now() });
+    return { bids, asks };
+  } catch {
+    return null;
+  }
+}
+
+// ── P50 liquidity imbalance: returns deviation of midpoint from current price ──
+function analyzeP50(bids: [number,number][], asks: [number,number][], price: number): { hasImbalance: boolean; p50Price: number; deviationPct: number } {
+  const totalBid = bids.reduce((s, [, v]) => s + v, 0);
+  const totalAsk = asks.reduce((s, [, v]) => s + v, 0);
+  const total    = totalBid + totalAsk;
+  if (total === 0) return { hasImbalance: false, p50Price: price, deviationPct: 0 };
+
+  // Merge all levels sorted descending by price, accumulate volume to find P50
+  const levels = [
+    ...bids.map(([p, v]) => ({ price: p, vol: v })),
+    ...asks.map(([p, v]) => ({ price: p, vol: v })),
+  ].sort((a, b) => b.price - a.price);
+
+  let cum = 0;
+  let p50Price = price;
+  for (const lv of levels) {
+    cum += lv.vol;
+    if (cum >= total * 0.5) { p50Price = lv.price; break; }
+  }
+  const deviationPct = Math.abs(p50Price - price) / price * 100;
+  return { hasImbalance: deviationPct > 0.15, p50Price, deviationPct };
+}
+
 // ── Telegram sender ────────────────────────────────────────────────────────────
 async function sendTg(text: string): Promise<void> {
   const token  = process.env.TELEGRAM_TOKEN  || process.env.TELEGRAM_BOT_TOKEN;
@@ -163,6 +213,42 @@ async function sendTg(text: string): Promise<void> {
 }
 
 // ── Message builders ────────────────────────────────────────────────────────────
+
+function buildP50AlertMsg(symbol: string, price: number, p50Price: number, deviationPct: number): string {
+  const side = p50Price > price ? "ACIMA" : "ABAIXO";
+  return (
+    `⚠️ <b>MURALHA COM RISCO DE ESTOURO — LIQUIDEZ P50 DETECTADA</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🪙 ${symbol}-USDT-SWAP\n` +
+    `💵 Preço Atual: <b>${fmt(price)}</b>\n` +
+    `📊 Liquidez P50: <b>${fmt(p50Price)}</b> (${deviationPct.toFixed(3)}% ${side} do preço)\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🔥 Concentração de liquidez detectada no Order Book.\n` +
+    `🎯 <b>Ajuste o ponto de entrada para: ${fmt(p50Price)}</b>\n` +
+    `⚠️ Risco de "estouro" da Muralha em direção ao P50!\n` +
+    `⏰ ${nowBR()} (Brasília)`
+  );
+}
+
+function buildCascadeMsg(symbol: string, direction: Direction, price: number, volRatio: number): string {
+  const dirEmoji = direction === "LONG" ? "📈" : "📉";
+  const forceType = direction === "LONG" ? "compradora" : "vendedora";
+  const dirLabel = direction === "LONG" ? "🟢 LONG" : "🔴 SHORT";
+  return (
+    `🔥 <b>EFEITO CASCATA DETECTADO!</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `🪙 ${symbol}-USDT-SWAP\n` +
+    `${dirEmoji} <b>${symbol} confirmada em 3 TFs (M5 · M15 · H1)</b>\n` +
+    `💥 Força ${forceType} isolada — Independente do BTC!\n` +
+    `📊 Volume 24h: <b>${volRatio.toFixed(1)}× acima da média</b>\n` +
+    `💵 Preço: <b>${fmt(price)}</b>\n` +
+    `━━━━━━━━━━━━━━━━━━━━\n` +
+    `${dirLabel} — Alta Probabilidade de continuação\n` +
+    `⚠️ Confirme entrada no M5 antes de executar!\n` +
+    `⏰ ${nowBR()} (Brasília)`
+  );
+}
+
 function buildSignalMsg(
   sig: ActiveSig,
   reason: string,
@@ -170,6 +256,7 @@ function buildSignalMsg(
   confluenceCount: number,
   isHighProb: boolean,
   lowAssertivity = false,
+  btcContraWarning = "",
 ): string {
   const dirEmoji = sig.direction === "LONG" ? "📈" : "📉";
   const dirLabel = sig.direction === "LONG" ? "🟢 LONG" : "🔴 SHORT";
@@ -193,6 +280,7 @@ function buildSignalMsg(
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `${isRev ? "⚠️ <b>OPERAÇÃO DE REVERSÃO — ALVO CURTO</b>\n" : ""}` +
     `${lowAssertivity ? "⚠️ <b>Horário de Baixa Assertividade Histórica — reduza o tamanho da posição!</b>\n" : ""}` +
+    `${btcContraWarning ? btcContraWarning + "\n" : ""}` +
     `🪙 Ativo: <b>${sig.symbol}-USDT-SWAP</b>\n` +
     `${emoji} Estratégia: <b>${sig.strategy}</b>\n` +
     `⏱ Timeframe: <b>M5/M15</b>${h4Label ? ` · ${h4Label}` : ""}${gpsLine}\n` +
@@ -240,15 +328,17 @@ function buildWinMsg(sig: ActiveSig, tpLevel: 1 | 2 | 3): string {
       `🪙 ${sig.symbol}-USDT-SWAP | ${dirEmoji} ${sig.direction}\n` +
       `🎯 TP1: <b>${fmt(tpPrice)}</b> (+${tpPct.toFixed(2)}%)\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🛡️ <b>MOVA O STOP LOSS PARA O PONTO DE ENTRADA AGORA!</b>\n` +
-      `Média de Entrada: ${fmt(sig.avgEntry)} → Novo SL: <b>${fmt(sig.avgEntry)}</b> (Break-Even)\n` +
+      `🛡️ <b>PROTOCOLO RISCO ZERO + TRAILING SAR:</b>\n` +
+      `• Mova o Stop Loss para o Breakeven: <b>${fmt(sig.avgEntry)}</b>\n` +
+      `• Siga o rastro do SAR Parabólico (Parabolic SAR) para maximizar o lucro.\n` +
+      `• Conforme o SAR avançar a seu favor, ajuste o stop para o nível do SAR atual.\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `💰 <b>Ganhos Parciais (Banca $${BANCA}):</b>\n` +
       `  · 10x: <b>+${fmtUSD(p10)}</b>\n` +
       `  · 25x: <b>+${fmtUSD(p25)}</b>\n` +
       `  · 50x: <b>+${fmtUSD(p50)}</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🎯 Próximo alvo: TP2 — mantenha a posição restante!\n` +
+      `🎯 Próximo alvo: TP2 — mantenha a posição restante com Stop no Breakeven!\n` +
       `⏰ ${nowBR()} (Brasília)`
     );
   }
@@ -440,6 +530,29 @@ async function scanCoin(symbol: string): Promise<void> {
     // ── TP/SL tracking for active signals ────────────────────────────────────
     await checkActiveSignals(symbol, price);
 
+    // ── Gatilho de Cascata de Altcoins (M5 > M15 > H1) ───────────────────────
+    // If M5, M15, H1 all agree AND 24h volume > 3× average → high-probability alert
+    if (symbol !== "BTC") {
+      const sameDir = m5Trend !== "NEUTRAL" && m5Trend === m15Trend && m15Trend === h1Trend;
+      if (sameDir) {
+        const d1Avg     = cD1.length >= 5 ? calculateAvgVolume(cD1.slice(-21, -1), Math.min(20, cD1.length - 1)) : 0;
+        const d1LastVol = cD1[cD1.length - 1]?.volume ?? 0;
+        const highVol24h = d1Avg > 0 && d1LastVol > d1Avg * 3;
+        if (highVol24h) {
+          const cascKey   = `${symbol}-cascade`;
+          const lastCasc  = cascadeCooldownMap.get(cascKey) ?? 0;
+          if (Date.now() - lastCasc >= CASCADE_COOLDOWN_MS) {
+            cascadeCooldownMap.set(cascKey, Date.now());
+            const cascDir = m5Trend === "BULL" ? "LONG" : "SHORT" as Direction;
+            const volRatio = d1LastVol / d1Avg;
+            logger.info({ symbol, cascDir, volRatio: volRatio.toFixed(1) }, "Scanner: Efeito Cascata detectado");
+            await sendTg(buildCascadeMsg(symbol, cascDir, price, volRatio));
+            notifySignalSent();
+          }
+        }
+      }
+    }
+
     // ── M5 indicators ────────────────────────────────────────────────────────
     const m5Closes   = c5m.map(c => c.close);
     const m5Rsi6arr  = calculateRSI(m5Closes, 6);
@@ -519,6 +632,21 @@ async function scanCoin(symbol: string): Promise<void> {
         logger.info({ symbol, imm80Dir, distPct }, "Scanner: Antecipação 80% imediata (Surfe 200)");
         await sendTg(buildAnticipationMsg(symbol, imm80Dir, "Surfe 200 — Antecipação Imediata", price, imm80Reason, Math.max(bullCount, bearCount)));
         notifySignalSent();
+      }
+    }
+
+    // ── Módulo P50 & Liquidez Real (Order Book Muralha) ──────────────────────
+    // When price is within 0.5% of EMA200, check order book for P50 imbalance
+    const nearMuralha = curr200 > 0 && Math.abs(price - curr200) / curr200 < 0.005;
+    if (nearMuralha) {
+      const ob = await fetchOrderBook(symbol);
+      if (ob) {
+        const p50 = analyzeP50(ob.bids, ob.asks, price);
+        if (p50.hasImbalance) {
+          logger.info({ symbol, p50Price: p50.p50Price, pct: p50.deviationPct.toFixed(3) }, "Scanner: P50 liquidity imbalance at Muralha");
+          await sendTg(buildP50AlertMsg(symbol, price, p50.p50Price, p50.deviationPct));
+          notifySignalSent();
+        }
       }
     }
 
@@ -690,11 +818,14 @@ async function scanCoin(symbol: string): Promise<void> {
     const leverage   = Math.max(...dominant.map(s => s.leverage));
     const reason     = dominant.map(s => s.reason).join(" | ");
 
-    // ── FEATURE: Termômetro BTC Macro (novo) ────────────────────────────────
-    // Se BTC M5 diverge, mas H4 ou D1 da Altcoin concorda → libera (prioridade macro)
-    // Só bloqueia se BTC M5 diverge E H4/D1 da Altcoin também não confirmam
+    // ── Trava Inteligente BTC (Filtro de Correlação) ────────────────────────
+    // BTC extreme bear (D1+H4 ambos BEAR) + altcoin LONG → não bloqueia, ETIQUETA
+    // BTC M5 diverge sem suporte macro da Altcoin → retém (bloqueia)
+    let btcContraWarning = "";
     if (symbol !== "BTC") {
-      const btcM5 = btcRef.m5;
+      const btcM5         = btcRef.m5;
+      const extremeBtcBear = btcRef.d1 === "BEAR" && btcRef.h4 === "BEAR";
+
       if (direction === "SHORT" && btcM5 === "BULL") {
         const macroSupports = multiTrend.h4 === "BEAR" || multiTrend.d1 === "BEAR";
         if (!macroSupports) {
@@ -705,15 +836,24 @@ async function scanCoin(symbol: string): Promise<void> {
         }
         logger.info({ symbol, direction }, "Scanner: BTC M5 diverges but macro H4/D1 supports → releasing signal");
       }
+
       if (direction === "LONG" && btcM5 === "BEAR") {
-        const macroSupports = multiTrend.h4 === "BULL" || multiTrend.d1 === "BULL";
-        if (!macroSupports) {
-          logger.info({ symbol, direction, btcM5 }, "Scanner: signal retained by BTC thermometer (no macro backup)");
-          await sendTg(buildRetainedMsg(symbol, direction, price, strategies));
-          notifySignalSent();
-          return;
+        if (extremeBtcBear) {
+          // BTC in full macro bear: LABEL instead of block (Trava Inteligente)
+          btcContraWarning =
+            `⚠️ <b>Aviso de Risco: Contra-tendência Majoritária (BTC).</b>\n` +
+            `BTC em queda extrema (D1🔴 H4🔴). Opere com 50% da mão ou aguarde Pivot no M15.`;
+          logger.info({ symbol, direction }, "Scanner: BTC extreme bear — labeling LONG with contra-trend warning");
+        } else {
+          const macroSupports = multiTrend.h4 === "BULL" || multiTrend.d1 === "BULL";
+          if (!macroSupports) {
+            logger.info({ symbol, direction, btcM5 }, "Scanner: signal retained by BTC thermometer (no macro backup)");
+            await sendTg(buildRetainedMsg(symbol, direction, price, strategies));
+            notifySignalSent();
+            return;
+          }
+          logger.info({ symbol, direction }, "Scanner: BTC M5 diverges but macro H4/D1 supports → releasing signal");
         }
-        logger.info({ symbol, direction }, "Scanner: BTC M5 diverges but macro H4/D1 supports → releasing signal");
       }
     }
 
@@ -760,7 +900,7 @@ async function scanCoin(symbol: string): Promise<void> {
       if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
 
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
-      await sendTg(buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity));
+      await sendTg(buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning));
       notifySignalSent();
     }
   } catch (err: any) {
