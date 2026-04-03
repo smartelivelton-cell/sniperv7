@@ -124,6 +124,74 @@ export function computeTrend(
   return diff > 0.001 ? "BULL" : diff < -0.001 ? "BEAR" : "NEUTRAL";
 }
 
+// ── KDJ (9-period Stochastic) ─────────────────────────────────────────────────
+export interface KDJPoint { k: number; d: number; j: number }
+
+export function calculateKDJ(candles: Candle[], period = 9): KDJPoint[] {
+  if (candles.length < 2) return candles.map(() => ({ k: 50, d: 50, j: 50 }));
+  const result: KDJPoint[] = [];
+  let k = 50, d = 50;
+  for (let i = 0; i < candles.length; i++) {
+    const slice   = candles.slice(Math.max(0, i - period + 1), i + 1);
+    const highest = Math.max(...slice.map(c => c.high));
+    const lowest  = Math.min(...slice.map(c => c.low));
+    const rsv     = highest === lowest ? 50 : ((candles[i].close - lowest) / (highest - lowest)) * 100;
+    k = (2 / 3) * k + (1 / 3) * rsv;
+    d = (2 / 3) * d + (1 / 3) * k;
+    result.push({ k, d, j: 3 * k - 2 * d });
+  }
+  return result;
+}
+
+// ── MACD (12, 26, 9) ──────────────────────────────────────────────────────────
+export interface MACDResult { macdLine: number[]; signalLine: number[]; histogram: number[] }
+
+export function calculateMACD(prices: number[], fast = 12, slow = 26, signal = 9): MACDResult {
+  const emaFast   = calculateEMA(prices, fast);
+  const emaSlow   = calculateEMA(prices, slow);
+  const macdLine  = emaFast.map((v, i) => v - emaSlow[i]);
+  const signalLine = calculateEMA(macdLine, signal);
+  const histogram = macdLine.map((v, i) => v - signalLine[i]);
+  return { macdLine, signalLine, histogram };
+}
+
+// ── Bollinger Bands (20, 2σ) ──────────────────────────────────────────────────
+export interface BBPoint { upper: number; middle: number; lower: number; width: number }
+
+export function calculateBB(prices: number[], period = 20, stdMult = 2): BBPoint[] {
+  return prices.map((_, i) => {
+    const slice  = prices.slice(Math.max(0, i - period + 1), i + 1);
+    const mean   = slice.reduce((a, b) => a + b, 0) / slice.length;
+    const std    = Math.sqrt(slice.reduce((a, b) => a + (b - mean) ** 2, 0) / slice.length);
+    const upper  = mean + stdMult * std;
+    const lower  = mean - stdMult * std;
+    return { upper, middle: mean, lower, width: upper - lower };
+  });
+}
+
+// ── OBV (On-Balance Volume) ───────────────────────────────────────────────────
+export function calculateOBV(candles: Candle[]): number[] {
+  const result = [0];
+  for (let i = 1; i < candles.length; i++) {
+    const prev = result[i - 1];
+    if (candles[i].close > candles[i - 1].close)      result.push(prev + candles[i].volume);
+    else if (candles[i].close < candles[i - 1].close) result.push(prev - candles[i].volume);
+    else                                               result.push(prev);
+  }
+  return result;
+}
+
+// ── VWAP (session from provided candles) ──────────────────────────────────────
+export function calculateVWAP(candles: Candle[]): number {
+  let cumPV = 0, cumV = 0;
+  for (const c of candles) {
+    const typical = (c.high + c.low + c.close) / 3;
+    cumPV += typical * c.volume;
+    cumV  += c.volume;
+  }
+  return cumV === 0 ? 0 : cumPV / cumV;
+}
+
 export function calcSlTp(
   entry: number,
   direction: "LONG" | "SHORT",
