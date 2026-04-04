@@ -40,9 +40,6 @@ const escortMap = new Map<string, EscortState>();
 /** Pending signal message IDs per symbol — deleted when ATIRAR is clicked for that coin. */
 const pendingMsgsBySymbol = new Map<string, number[]>();
 
-/** Latest trade data per "SYMBOL:DIRECTION" — retrieved when ATIRAR is clicked. */
-const pendingTrades = new Map<string, TradeData>();
-
 // ── Internal Telegram helpers ─────────────────────────────────────────────────
 async function tgSend(text: string, extra: Record<string, any> = {}): Promise<number | null> {
   const token  = process.env.TELEGRAM_TOKEN  || process.env.TELEGRAM_BOT_TOKEN;
@@ -211,11 +208,6 @@ export function isSymbolBlocked(symbol: string): boolean {
   return escortMap.has(symbol);
 }
 
-/** Register trade data so it can be retrieved when ATIRAR is clicked. */
-export function registerTrade(data: TradeData): void {
-  pendingTrades.set(`${data.symbol}:${data.direction}`, data);
-}
-
 /**
  * Track a signal message ID for a specific coin.
  * Only this coin's messages will be deleted when ATIRAR is clicked for it.
@@ -228,42 +220,66 @@ export function trackSignalMessage(symbol: string, messageId: number): void {
   pendingMsgsBySymbol.set(symbol, ids);
 }
 
-/** Returns the Telegram inline_keyboard object for the ATIRAR button. */
-export function buildAtiraKeyboard(symbol: string, direction: string): object {
+/**
+ * Compact price formatter — keeps numbers short enough to fit in Telegram's
+ * 64-byte callback_data limit while retaining enough precision for trading.
+ */
+function compactP(n: number): string {
+  if (n >= 10000) return n.toFixed(0);
+  if (n >= 1000)  return n.toFixed(1).replace(/\.0$/, "");
+  if (n >= 100)   return n.toFixed(2).replace(/\.?0+$/, "");
+  if (n >= 10)    return n.toFixed(3).replace(/\.?0+$/, "");
+  if (n >= 1)     return n.toFixed(4).replace(/\.?0+$/, "");
+  if (n >= 0.1)   return n.toFixed(5).replace(/\.?0+$/, "");
+  return n.toFixed(6).replace(/\.?0+$/, "");
+}
+
+/**
+ * Returns the Telegram inline_keyboard with ATIRAR button.
+ * Trade data is encoded directly in callback_data so it survives server restarts.
+ * Format: atirar:SYM:L|S:entry:sl:tp1:tp2:tp3  (always < 64 bytes)
+ */
+export function buildAtiraKeyboard(trade: TradeData): object {
+  const dir  = trade.direction === "LONG" ? "L" : "S";
+  const data = [
+    "atirar",
+    trade.symbol,
+    dir,
+    compactP(trade.avgEntry),
+    compactP(trade.sl),
+    compactP(trade.tp1),
+    compactP(trade.tp2),
+    compactP(trade.tp3),
+  ].join(":");
   return {
     inline_keyboard: [[{
       text:          "🚀 ATIRAR! (ENTREI NESSA)",
-      callback_data: `atirar:${symbol}:${direction}`,
+      callback_data: data,
     }]],
   };
 }
 
 /**
  * Called by the webhook when captain clicks ATIRAR.
+ * Trade data is passed directly from the button's callback_data (no memory lookup needed).
  * Adds coin to ATIVOS_EM_CURSO and deletes only that coin's pending signal messages.
  * Other coins in the chat are left untouched and continue signaling normally.
  */
 export async function handleAtirar(
-  symbol:          string,
-  direction:       "LONG" | "SHORT",
+  trade:           TradeData,
   callbackQueryId: string,
 ): Promise<void> {
+  const { symbol, direction } = trade;
+
   // Reject duplicate ATIRAR for the same coin already in escort
   if (escortMap.has(symbol)) {
     await tgAnswerCallback(callbackQueryId, `⚠️ ${symbol} já está em escolta ativa!`);
     return;
   }
 
-  const data = pendingTrades.get(`${symbol}:${direction}`);
-  if (!data) {
-    await tgAnswerCallback(callbackQueryId, `⚠️ Dados do sinal de ${symbol} expirados. Aguarde o próximo.`);
-    logger.warn({ symbol, direction }, "CaptainMode: trade data não encontrado — ATIRAR ignorado");
-    return;
-  }
-
   // Delete only THIS coin's pending signal messages (other coins untouched)
   const coinMsgIds = pendingMsgsBySymbol.get(symbol) ?? [];
-  logger.info({ symbol, direction, msgCount: coinMsgIds.length }, "CaptainMode: ATIRAR — deletando sinais de entrada de " + symbol);
+  logger.info({ symbol, direction, msgCount: coinMsgIds.length }, "CaptainMode: ATIRAR — deletando sinais de " + symbol);
   await Promise.allSettled(coinMsgIds.map(id => tgDelete(id)));
   pendingMsgsBySymbol.set(symbol, []);
 
@@ -271,7 +287,7 @@ export async function handleAtirar(
 
   // Start per-coin escort timer
   const timer = setInterval(() => runEscortUpdate(symbol), ESCORT_INTERVAL_MS);
-  escortMap.set(symbol, { trade: { ...data }, riskZeroActivated: false, escortTimer: timer });
+  escortMap.set(symbol, { trade: { ...trade }, riskZeroActivated: false, escortTimer: timer });
 
   const activeList = [...escortMap.keys()].join(", ");
   logger.info({ symbol, direction, ativos: activeList }, "CaptainMode: ATIVOS_EM_CURSO atualizado");
@@ -280,9 +296,9 @@ export async function handleAtirar(
     `🚀 <b>CAPITÃO A BORDO!</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🪙 Escolta iniciada: <b>${symbol}-USDT-SWAP</b>\n` +
-    `📍 Entrada Média: <b>${fmt(data.avgEntry)}</b>\n` +
-    `🛡️ Stop Loss: <b>${fmt(data.sl)}</b>\n` +
-    `🎯 TP1: <b>${fmt(data.tp1)}</b> | TP2: <b>${fmt(data.tp2)}</b> | TP3: <b>${fmt(data.tp3)}</b>\n` +
+    `📍 Entrada Média: <b>${fmt(trade.avgEntry)}</b>\n` +
+    `🛡️ Stop Loss: <b>${fmt(trade.sl)}</b>\n` +
+    `🎯 TP1: <b>${fmt(trade.tp1)}</b> | TP2: <b>${fmt(trade.tp2)}</b> | TP3: <b>${fmt(trade.tp3)}</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📡 Atualização a cada 60s.\n` +
     `⏸️ Novos sinais de ${symbol} suspensos.\n` +

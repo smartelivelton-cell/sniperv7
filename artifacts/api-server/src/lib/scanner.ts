@@ -2,7 +2,7 @@ import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
 import { isLowAssertivityHour } from "./backtestState";
 import { logWin } from "./winsLog";
-import { isSymbolBlocked, registerTrade, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
+import { isSymbolBlocked, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
 import {
   calculateEMA,
   calculateRSI,
@@ -907,13 +907,10 @@ async function scanCoin(symbol: string): Promise<void> {
       const lowAssertivity   = isSurfe200Signal && isLowAssertivityHour(symbol);
       if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
 
-      // Register trade data for ATIRAR callback
-      registerTrade({ symbol, direction, avgEntry, sl, tp1, tp2, tp3 });
-
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
       const msgId = await sendTg(
         buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning),
-        buildAtiraKeyboard(symbol, direction),
+        buildAtiraKeyboard({ symbol, direction, avgEntry, sl, tp1, tp2, tp3 }),
       );
       if (msgId !== null) trackSignalMessage(symbol, msgId);
       notifySignalSent();

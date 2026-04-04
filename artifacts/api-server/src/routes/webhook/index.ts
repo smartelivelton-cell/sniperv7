@@ -1,9 +1,15 @@
 import { Router } from "express";
-import { handleAtirar } from "../../lib/captainMode";
+import { handleAtirar, type TradeData } from "../../lib/captainMode";
 import { logger } from "../../lib/logger";
 
 const router = Router();
 
+/**
+ * POST /api/webhook/telegram
+ * Receives callback_query updates from Telegram when the captain clicks ATIRAR.
+ * callback_data format: atirar:SYM:L|S:avgEntry:sl:tp1:tp2:tp3
+ * All trade data is embedded in the button — no server memory lookup needed.
+ */
 router.post("/telegram", async (req, res) => {
   const update = req.body;
 
@@ -12,19 +18,28 @@ router.post("/telegram", async (req, res) => {
 
     if (typeof data === "string" && data.startsWith("atirar:")) {
       const parts = data.split(":");
+      // parts: [0]=atirar [1]=SYM [2]=L|S [3]=entry [4]=sl [5]=tp1 [6]=tp2 [7]=tp3
       const symbol    = parts[1] ?? "";
-      const direction = (parts[2] ?? "LONG") as "LONG" | "SHORT";
+      const dir       = parts[2] ?? "L";
+      const avgEntry  = parseFloat(parts[3] ?? "0");
+      const sl        = parseFloat(parts[4] ?? "0");
+      const tp1       = parseFloat(parts[5] ?? "0");
+      const tp2       = parseFloat(parts[6] ?? "0");
+      const tp3       = parseFloat(parts[7] ?? "0");
 
-      if (!symbol) {
-        logger.warn({ data }, "Webhook: callback_data mal formada — ignorando");
+      if (!symbol || isNaN(avgEntry) || isNaN(sl) || isNaN(tp1)) {
+        logger.warn({ data }, "Webhook: callback_data inválida — ignorando");
         res.json({ ok: true });
         return;
       }
 
-      logger.info({ symbol, direction }, "Webhook: ATIRAR recebido");
+      const direction: "LONG" | "SHORT" = dir === "L" ? "LONG" : "SHORT";
+      const trade: TradeData = { symbol, direction, avgEntry, sl, tp1, tp2, tp3 };
 
-      // Run async so we can respond to Telegram immediately (5s deadline)
-      handleAtirar(symbol, direction, callbackQueryId).catch(err =>
+      logger.info({ symbol, direction, avgEntry, sl, tp1 }, "Webhook: ATIRAR recebido");
+
+      // Run async so we respond to Telegram within their 5-second deadline
+      handleAtirar(trade, callbackQueryId).catch(err =>
         logger.warn({ err: err.message }, "Webhook: handleAtirar error"),
       );
     }
