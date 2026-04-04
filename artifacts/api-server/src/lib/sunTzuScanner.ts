@@ -6,6 +6,7 @@
 
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
+import { startOKXTimeSync, forceSyncNow } from "./okxTime";
 import {
   calculateEMA,
   calculateRSI,
@@ -330,14 +331,16 @@ async function scanSunTzu(symbol: string): Promise<void> {
 
   // ── LEVEL 1: EM FORMAÇÃO ───────────────────────────────────────────────────
   // Price within 0.15% of EMA200 + RSI > 50
+  // Level 1 is logged internally only — Telegram is reserved for Level 2 & 3.
   const nearMuralha = parseFloat(distPct) < 0.15;
   if (nearMuralha && currRsi > 50) {
     const lastLvl1 = lvl1Map.get(symbol) ?? 0;
     if (now - lastLvl1 >= LVL1_COOLDOWN_MS) {
       lvl1Map.set(symbol, now);
-      logger.info({ symbol, rsi: currRsi.toFixed(0), dist: distPct }, "SunTzu: Nível 1 — Em Formação");
-      await sendTg(msgLevel1(symbol, price, ema200, currRsi, distPct));
-      notifySignalSent();
+      logger.info(
+        { symbol, rsi: currRsi.toFixed(0), dist: distPct, price, ema200 },
+        "SunTzu: Nível 1 — Em Formação (log interno — Telegram reservado para Nível 2 e 3)",
+      );
     }
     return; // Don't check further levels when still approaching
   }
@@ -491,9 +494,19 @@ async function monitorActivePositions(): Promise<void> {
   }
 }
 
+// ── Cache clear (for external reset endpoint) ──────────────────────────────────
+export function clearSunTzuCache(): void {
+  klineCache.clear();
+  lvl1Map.clear();
+  lvl2Map.clear();
+  lvl3Map.clear();
+  logger.info("SunTzu: cache limpo — forçando nova conexão com OKX");
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 export async function startSunTzuScanner(): Promise<void> {
   if (sunTzuTimer) return;
+  startOKXTimeSync();
   logger.info({ symbols: SYMBOLS, intervalSeconds: SCAN_INTERVAL_MS / 1000 }, "SunTzu: Vencer Sem Lutar iniciado");
 
   const runAll = async () => {

@@ -4,6 +4,7 @@ import { startHeartbeat } from "./lib/heartbeat";
 import { startScanner } from "./lib/scanner";
 import { startTankScanner } from "./lib/tankScanner";
 import { startSunTzuScanner } from "./lib/sunTzuScanner";
+import { startOKXTimeSync } from "./lib/okxTime";
 import { warmUpBacktest } from "./routes/backtest/index";
 
 const rawPort = process.env["PORT"];
@@ -27,6 +28,7 @@ app.listen(port, (err) => {
   }
 
   logger.info({ port }, "Server listening");
+  startOKXTimeSync();
   startHeartbeat();
   startScanner();
   startTankScanner();
