@@ -410,6 +410,14 @@ async function scanTank(symbol: string): Promise<void> {
   }
 }
 
+/** Clear all in-memory caches — forces a fresh fetch from OKX on the next cycle. */
+export function clearTankCache(): void {
+  klineCache.clear();
+  cooldownMap.clear();
+  absorptionMap.clear();
+  logger.info("TankScanner: cache limpo — forçando nova conexão com OKX");
+}
+
 // ── Entry point ────────────────────────────────────────────────────────────────
 export async function startTankScanner(): Promise<void> {
   if (tankTimer) return;

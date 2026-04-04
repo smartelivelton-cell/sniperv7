@@ -19,12 +19,25 @@ export interface WinEntry {
   dateBR: string;
 }
 
+// Last-valid-cache: returned when the JSON file is missing, empty, or truncated.
+let _lastValidCache: WinEntry[] = [];
+
 function readWins(): WinEntry[] {
   try {
     const raw = fs.readFileSync(WINS_FILE, "utf8");
-    return JSON.parse(raw) as WinEntry[];
-  } catch {
-    return [];
+    if (!raw || raw.trim() === "") {
+      logger.warn("winsLog: historico_wins.json está vazio — retornando último cache válido");
+      return _lastValidCache;
+    }
+    const parsed = JSON.parse(raw) as WinEntry[];
+    _lastValidCache = parsed; // update cache on every successful read
+    return parsed;
+  } catch (err: any) {
+    logger.warn(
+      { err: err.message, file: WINS_FILE },
+      "winsLog: falha ao carregar JSON (Unexpected end of input?) — retornando último cache válido",
+    );
+    return _lastValidCache;
   }
 }
 

@@ -939,3 +939,19 @@ export function stopScanner(): void {
     logger.info("Server-side scanner stopped");
   }
 }
+
+/** Clear all in-memory caches — forces a fresh fetch from OKX on the next cycle. */
+export function clearScannerCache(): void {
+  klineCache.clear();
+  orderBookCache.clear();
+  cooldownMap.clear();
+  anticipationMap.clear();
+  forceVolMap.clear();
+  prevM5RsiMap.clear();
+  prevEma200Map.clear();
+  prevSarDistMap.clear();
+  sarPreCooldownMap.clear();
+  lastSignalDirMap.clear();
+  cascadeCooldownMap.clear();
+  logger.info("Scanner: cache limpo — forçando nova conexão com OKX");
+}
