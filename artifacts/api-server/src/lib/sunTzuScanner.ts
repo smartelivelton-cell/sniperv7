@@ -7,7 +7,7 @@
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
 import { startOKXTimeSync, forceSyncNow } from "./okxTime";
-import { isSymbolBlocked, registerTrade, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
+import { isSymbolBlocked, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
 import {
   calculateEMA,
   calculateRSI,
@@ -379,16 +379,18 @@ async function scanSunTzu(symbol: string): Promise<void> {
           ? prevCandle.high * 1.0001
           : prevCandle.low  * 0.9999;
 
-        // Estimate SL/TP for ATIRAR callback (1:1 risk using 1% from entry)
+        // Estimate SL/TP for ATIRAR button (1:1 risk using 1% from entry)
         const slPct  = entryTrigger * 0.01;
         const estSl  = direction === "LONG" ? entryTrigger - slPct : entryTrigger + slPct;
         const estTp1 = direction === "LONG" ? entryTrigger + slPct : entryTrigger - slPct;
         const estTp2 = direction === "LONG" ? entryTrigger + slPct * 2 : entryTrigger - slPct * 2;
         const estTp3 = direction === "LONG" ? entryTrigger + slPct * 3 : entryTrigger - slPct * 3;
-        registerTrade({ symbol, direction, avgEntry: entryTrigger, sl: estSl, tp1: estTp1, tp2: estTp2, tp3: estTp3 });
 
         logger.info({ symbol, direction, lsRatio, lsFalling }, "SunTzu: Nível 2 — Antecipação 80%");
-        const msgId = await sendTg(msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger), buildAtiraKeyboard(symbol, direction));
+        const msgId = await sendTg(
+          msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger),
+          buildAtiraKeyboard({ symbol, direction, avgEntry: entryTrigger, sl: estSl, tp1: estTp1, tp2: estTp2, tp3: estTp3 }),
+        );
         if (msgId !== null) trackSignalMessage(symbol, msgId);
         notifySignalSent();
       }
@@ -441,10 +443,10 @@ async function scanSunTzu(symbol: string): Promise<void> {
       const tp1Lvl3 = dir3 === "LONG" ? avg + slDist     : avg - slDist;
       const tp2Lvl3 = dir3 === "LONG" ? avg + slDist * 2 : avg - slDist * 2;
       const tp3Lvl3 = dir3 === "LONG" ? avg + slDist * 3 : avg - slDist * 3;
-      registerTrade({ symbol, direction: dir3, avgEntry: avg, sl: trailSL, tp1: tp1Lvl3, tp2: tp2Lvl3, tp3: tp3Lvl3 });
+
 
       logger.info({ symbol, direction: dir3, score: "3/3", volRatio: volRatio.toFixed(2) }, "SunTzu: Nível 3 — Confirmação Sun Tzu");
-      const msgId3 = await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3), buildAtiraKeyboard(symbol, dir3));
+      const msgId3 = await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3), buildAtiraKeyboard({ symbol, direction: dir3, avgEntry: avg, sl: trailSL, tp1: tp1Lvl3, tp2: tp2Lvl3, tp3: tp3Lvl3 }));
       if (msgId3 !== null) trackSignalMessage(symbol, msgId3);
       notifySignalSent();
     }
