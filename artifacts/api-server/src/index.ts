@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { startHeartbeat } from "./lib/heartbeat";
 import { startScanner } from "./lib/scanner";
 import { startTankScanner } from "./lib/tankScanner";
+import { startSunTzuScanner } from "./lib/sunTzuScanner";
 import { warmUpBacktest } from "./routes/backtest/index";
 
 const rawPort = process.env["PORT"];
@@ -29,5 +30,6 @@ app.listen(port, (err) => {
   startHeartbeat();
   startScanner();
   startTankScanner();
+  startSunTzuScanner();
   warmUpBacktest();
 });
