@@ -54,5 +54,19 @@
     "timestamp": "2026-04-04T15:08:24.669Z",
     "timestampBR": "12:08:24",
     "dateBR": "04/04/2026"
+  },
+  {
+    "symbol": "ADA",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 1,
+    "profitPct": 0.583058152775283,
+    "leverage": 50,
+    "avgEntry": 0.2451421075276037,
+    "tpPrice": 0.24657142857142855,
+    "id": "ADA-tp1-1775316234510",
+    "timestamp": "2026-04-04T15:23:54.510Z",
+    "timestampBR": "12:23:54",
+    "dateBR": "04/04/2026"
   }
 ]
