@@ -7,6 +7,7 @@ import monitorRouter from "./monitor/index";
 import telegramRouter from "./telegram/index";
 import backtestRouter from "./backtest/index";
 import winsRouter from "./wins/index";
+import webhookRouter from "./webhook/index";
 import { clearScannerCache } from "../lib/scanner";
 import { clearTankCache } from "../lib/tankScanner";
 import { clearSunTzuCache } from "../lib/sunTzuScanner";
@@ -23,6 +24,7 @@ router.use("/monitor", monitorRouter);
 router.use("/telegram", telegramRouter);
 router.use("/backtest", backtestRouter);
 router.use("/wins", winsRouter);
+router.use("/webhook", webhookRouter);
 
 // ── /reset — Protocolo de Reinicialização Limpa ────────────────────────────────
 router.post("/reset", async (_req, res) => {

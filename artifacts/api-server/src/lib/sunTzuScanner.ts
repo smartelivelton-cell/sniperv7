@@ -7,6 +7,7 @@
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
 import { startOKXTimeSync, forceSyncNow } from "./okxTime";
+import { isSymbolBlocked, registerTrade, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
 import {
   calculateEMA,
   calculateRSI,
@@ -119,23 +120,27 @@ async function fetchPrevLSRatio(symbol: string): Promise<number> {
 }
 
 // ── Telegram ───────────────────────────────────────────────────────────────────
-async function sendTg(text: string): Promise<void> {
+async function sendTg(text: string, replyMarkup?: object): Promise<number | null> {
   const token  = process.env.TELEGRAM_TOKEN  || process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.CHAT_ID         || process.env.TELEGRAM_CHAT_ID;
-  if (!token || !chatId) return;
+  if (!token || !chatId) return null;
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
       signal:  AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       const body = await res.text();
       logger.warn({ body }, "SunTzu: Telegram non-OK");
+      return null;
     }
+    const json: any = await res.json();
+    return json?.result?.message_id ?? null;
   } catch (err: any) {
     logger.warn({ err: err.message }, "SunTzu: Telegram send failed");
+    return null;
   }
 }
 
@@ -366,13 +371,27 @@ async function scanSunTzu(symbol: string): Promise<void> {
 
     const lastLvl2 = lvl2Map.get(symbol) ?? 0;
     if (now - lastLvl2 >= LVL2_COOLDOWN_MS && (sardinhasSelling || sardinhaBuying || crossed)) {
-      lvl2Map.set(symbol, now);
-      const entryTrigger = direction === "LONG"
-        ? prevCandle.high * 1.0001
-        : prevCandle.low  * 0.9999;
-      logger.info({ symbol, direction, lsRatio, lsFalling }, "SunTzu: Nível 2 — Antecipação 80%");
-      await sendTg(msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger));
-      notifySignalSent();
+      if (isSymbolBlocked(symbol)) {
+        logger.info({ symbol }, "SunTzu: Nível 2 suprimido — Modo Escolta ativo para esta moeda");
+      } else {
+        lvl2Map.set(symbol, now);
+        const entryTrigger = direction === "LONG"
+          ? prevCandle.high * 1.0001
+          : prevCandle.low  * 0.9999;
+
+        // Estimate SL/TP for ATIRAR callback (1:1 risk using 1% from entry)
+        const slPct  = entryTrigger * 0.01;
+        const estSl  = direction === "LONG" ? entryTrigger - slPct : entryTrigger + slPct;
+        const estTp1 = direction === "LONG" ? entryTrigger + slPct : entryTrigger - slPct;
+        const estTp2 = direction === "LONG" ? entryTrigger + slPct * 2 : entryTrigger - slPct * 2;
+        const estTp3 = direction === "LONG" ? entryTrigger + slPct * 3 : entryTrigger - slPct * 3;
+        registerTrade({ symbol, direction, avgEntry: entryTrigger, sl: estSl, tp1: estTp1, tp2: estTp2, tp3: estTp3 });
+
+        logger.info({ symbol, direction, lsRatio, lsFalling }, "SunTzu: Nível 2 — Antecipação 80%");
+        const msgId = await sendTg(msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger), buildAtiraKeyboard(symbol, direction));
+        if (msgId !== null) trackSignalMessage(msgId);
+        notifySignalSent();
+      }
     }
   }
 
@@ -412,8 +431,21 @@ async function scanSunTzu(symbol: string): Promise<void> {
         trailSL,
       });
 
+      if (isSymbolBlocked(symbol)) {
+        logger.info({ symbol }, "SunTzu: Nível 3 suprimido — Modo Escolta ativo para esta moeda");
+        return;
+      }
+
+      // Compute SL/TP from trailSL distance for ATIRAR callback
+      const slDist = Math.abs(avg - trailSL);
+      const tp1Lvl3 = dir3 === "LONG" ? avg + slDist     : avg - slDist;
+      const tp2Lvl3 = dir3 === "LONG" ? avg + slDist * 2 : avg - slDist * 2;
+      const tp3Lvl3 = dir3 === "LONG" ? avg + slDist * 3 : avg - slDist * 3;
+      registerTrade({ symbol, direction: dir3, avgEntry: avg, sl: trailSL, tp1: tp1Lvl3, tp2: tp2Lvl3, tp3: tp3Lvl3 });
+
       logger.info({ symbol, direction: dir3, score: "3/3", volRatio: volRatio.toFixed(2) }, "SunTzu: Nível 3 — Confirmação Sun Tzu");
-      await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3));
+      const msgId3 = await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3), buildAtiraKeyboard(symbol, dir3));
+      if (msgId3 !== null) trackSignalMessage(msgId3);
       notifySignalSent();
     }
   }
@@ -445,8 +477,7 @@ async function monitorActivePositions(): Promise<void> {
         pos.win1Pct = true;
         activePositions.set(symbol, pos);
         logger.info({ symbol, movePct: movePct.toFixed(2) }, "SunTzu: Marco 1% atingido");
-        await sendTg(msgWin1Pct(symbol, pos.direction, pos.avgEntry, price));
-        notifySignalSent();
+        if (!isSymbolBlocked(symbol)) { await sendTg(msgWin1Pct(symbol, pos.direction, pos.avgEntry, price)); notifySignalSent(); }
       }
 
       // Check trailing stop hit
@@ -476,8 +507,7 @@ async function monitorActivePositions(): Promise<void> {
 
         if (exitCondition) {
           logger.info({ symbol, pattern: reversalPattern, rsi: m15RsiNow.toFixed(0) }, "SunTzu: Sinal de saída M15");
-          await sendTg(msgExitSignal(symbol, pos.direction, price, reversalPattern, obvFalling));
-          notifySignalSent();
+          if (!isSymbolBlocked(symbol)) { await sendTg(msgExitSignal(symbol, pos.direction, price, reversalPattern, obvFalling)); notifySignalSent(); }
           activePositions.delete(symbol);
         }
       }
