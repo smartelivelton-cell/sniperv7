@@ -1,0 +1,58 @@
+[
+  {
+    "symbol": "SOL",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 1,
+    "profitPct": 0.5966316558991747,
+    "leverage": 50,
+    "avgEntry": 80.3409461966277,
+    "tpPrice": 80.8202857142857,
+    "id": "SOL-tp1-1775315214627",
+    "timestamp": "2026-04-04T15:06:54.627Z",
+    "timestampBR": "12:06:54",
+    "dateBR": "04/04/2026"
+  },
+  {
+    "symbol": "SOL",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 2,
+    "profitPct": 0.9081611139580285,
+    "leverage": 50,
+    "avgEntry": 80.3409461966277,
+    "tpPrice": 81.07057142857141,
+    "id": "SOL-tp2-1775315216474",
+    "timestamp": "2026-04-04T15:06:56.474Z",
+    "timestampBR": "12:06:56",
+    "dateBR": "04/04/2026"
+  },
+  {
+    "symbol": "AVAX",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 1,
+    "profitPct": 0.423174665500387,
+    "leverage": 50,
+    "avgEntry": 8.88808487655425,
+    "tpPrice": 8.925697,
+    "id": "AVAX-tp1-1775315245128",
+    "timestamp": "2026-04-04T15:07:25.128Z",
+    "timestampBR": "12:07:25",
+    "dateBR": "04/04/2026"
+  },
+  {
+    "symbol": "SOL",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 3,
+    "profitPct": 1.2196905720168822,
+    "leverage": 50,
+    "avgEntry": 80.3409461966277,
+    "tpPrice": 81.32085714285712,
+    "id": "SOL-tp3-1775315304669",
+    "timestamp": "2026-04-04T15:08:24.669Z",
+    "timestampBR": "12:08:24",
+    "dateBR": "04/04/2026"
+  }
+]
