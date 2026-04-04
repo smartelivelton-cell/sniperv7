@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { calculateEMA, calculateATR, type Candle } from "../../lib/indicators";
+import { calculateEMA, calculateATR, calculateRSI, type Candle } from "../../lib/indicators";
 import { setLowAssertivityHours } from "../../lib/backtestState";
 import { logger } from "../../lib/logger";
 
@@ -240,6 +240,151 @@ router.get("/surfe200", async (req, res) => {
     return res.json({ ok: true, data: result, cached: false });
   } catch (err: any) {
     logger.error({ err: err.message }, "Backtest failed");
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// ── Sun Tzu Backtest (H4, 365 days) ───────────────────────────────────────────
+// Entry: EMA200 cross + RSI(6) > 60 (LONG) / < 40 (SHORT) + Volume > 1.5x avg
+// TP = +1% from entry, SL = ATR*1.2
+async function runSunTzuBacktest(symbol: string): Promise<BacktestResult> {
+  const instId  = `${symbol}-USDT-SWAP`;
+  const candles = await fetchHistoricalCandles(instId, CANDLES_NEED);
+
+  if (candles.length < WARMUP + 30) {
+    throw new Error(`Dados insuficientes: ${candles.length} velas`);
+  }
+
+  const cutoff    = Date.now() - DAYS_BACK * 24 * 60 * 60 * 1000;
+  const firstIdx  = candles.findIndex(c => c.openTime >= cutoff);
+  const warmupIdx = Math.max(0, firstIdx - WARMUP);
+  const dataset   = candles.slice(warmupIdx);
+
+  const closes = dataset.map(c => c.close);
+  const ema200 = calculateEMA(closes, 200);
+  const ema9   = calculateEMA(closes, 9);
+  const ema21  = calculateEMA(closes, 21);
+  // RSI on the full closes array
+  const rsi6   = calculateRSI(closes, 6);
+
+  const hourRaw: Record<number, { wins: number; losses: number }> = {};
+  let wins = 0, losses = 0, skipped = 0;
+  let accumulatedProfitPct = 0, totalSLpct = 0;
+
+  const startIdx = Math.max(WARMUP, firstIdx - warmupIdx);
+
+  for (let i = startIdx; i < dataset.length - 6; i++) {
+    const candle     = dataset[i];
+    const prevCandle = dataset[i - 1];
+    const price      = candle.close;
+    const prevClose  = prevCandle.close;
+    const curr200    = ema200[i];
+    const prev200    = ema200[i - 1];
+    const currEma9   = ema9[i];
+    const currEma21  = ema21[i];
+    const currRsi    = rsi6[i] ?? 50;
+
+    if (!curr200 || !prev200 || !currEma9 || !currEma21) continue;
+
+    const crossedAbove = prevClose < prev200 && price > curr200;
+    const crossedBelow = prevClose > prev200 && price < curr200;
+    if (!crossedAbove && !crossedBelow) continue;
+
+    // Sun Tzu entry filter: RSI > 60 for LONG, < 40 for SHORT
+    if (crossedAbove && currRsi <= 60) { skipped++; continue; }
+    if (crossedBelow && currRsi >= 40) { skipped++; continue; }
+
+    // Volume filter: must be ≥ 1.5× 10-candle average
+    const volSlice = dataset.slice(Math.max(0, i - 10), i);
+    const avgVol   = volSlice.reduce((s, c) => s + c.volume, 0) / Math.max(1, volSlice.length);
+    if (candle.volume < avgVol * 1.5) { skipped++; continue; }
+
+    // EMA9 must agree with direction
+    if (crossedAbove && currEma9 <= currEma21) { skipped++; continue; }
+    if (crossedBelow && currEma9 >= currEma21) { skipped++; continue; }
+
+    const direction = crossedAbove ? "LONG" : "SHORT";
+    const entry     = price;
+    const atr       = calculateATR(dataset.slice(Math.max(0, i - 14), i + 1), 14);
+    const slDist    = Math.max((atr / entry) * 1.2, 0.003);
+    const sl        = direction === "LONG" ? entry * (1 - slDist) : entry * (1 + slDist);
+    const tp        = direction === "LONG" ? entry * 1.01         : entry * 0.99;
+
+    let outcome: "win" | "loss" | null = null;
+    for (let j = i + 1; j < Math.min(i + 40, dataset.length); j++) {
+      const f = dataset[j];
+      if (direction === "LONG") {
+        if (f.high >= tp) { outcome = "win";  break; }
+        if (f.low  <= sl) { outcome = "loss"; break; }
+      } else {
+        if (f.low  <= tp) { outcome = "win";  break; }
+        if (f.high >= sl) { outcome = "loss"; break; }
+      }
+    }
+    if (!outcome) { skipped++; continue; }
+
+    const hr = hourBR(candle.openTime);
+    if (!hourRaw[hr]) hourRaw[hr] = { wins: 0, losses: 0 };
+
+    if (outcome === "win") {
+      wins++; hourRaw[hr].wins++;
+      accumulatedProfitPct += 1.0;
+    } else {
+      losses++; hourRaw[hr].losses++;
+      accumulatedProfitPct -= slDist * 100;
+      totalSLpct += slDist * 100;
+    }
+  }
+
+  const totalSignals = wins + losses;
+  const winRate      = totalSignals > 0 ? (wins / totalSignals) * 100 : 0;
+  const avgSL        = losses > 0 ? totalSLpct / losses : 1.5;
+  const avgRR        = avgSL > 0 ? parseFloat((1.0 / avgSL).toFixed(2)) : 0.67;
+
+  const hourStats: Record<number, HourStat> = {};
+  for (const [h, { wins: w, losses: l }] of Object.entries(hourRaw)) {
+    const total = w + l;
+    hourStats[parseInt(h)] = {
+      wins: w, losses: l, signals: total,
+      winRate: total > 0 ? Math.round((w / total) * 1000) / 10 : 0,
+    };
+  }
+
+  const lowAssertivityHours = Object.entries(hourStats)
+    .filter(([, s]) => s.signals >= 3 && s.winRate < 50)
+    .map(([h]) => parseInt(h));
+
+  const daysAnalyzed = Math.round(
+    (dataset[dataset.length - 1].openTime - dataset[startIdx]?.openTime) /
+    (24 * 60 * 60 * 1000),
+  );
+
+  return {
+    symbol, bar: BAR, totalSignals, wins, losses, skipped,
+    winRate:              Math.round(winRate * 10) / 10,
+    accumulatedProfitPct: Math.round(accumulatedProfitPct * 10) / 10,
+    avgRR, hourStats, lowAssertivityHours,
+    lastUpdated: new Date().toLocaleString("pt-BR", { timeZone: TZ }),
+    dataPoints:  candles.length,
+    daysAnalyzed,
+  };
+}
+
+const sunTzuCache = new Map<string, { result: BacktestResult; ts: number }>();
+
+router.get("/suntzu", async (req, res) => {
+  const symbol = (typeof req.query.symbol === "string" ? req.query.symbol : "BTC").toUpperCase();
+  const cached = sunTzuCache.get(symbol);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return res.json({ ok: true, data: cached.result, cached: true });
+  }
+  try {
+    const result = await runSunTzuBacktest(symbol);
+    sunTzuCache.set(symbol, { result, ts: Date.now() });
+    logger.info({ symbol, winRate: result.winRate, signals: result.totalSignals }, "SunTzu backtest completed");
+    return res.json({ ok: true, data: result, cached: false });
+  } catch (err: any) {
+    logger.error({ err: err.message }, "SunTzu backtest failed");
     return res.status(500).json({ ok: false, error: err.message });
   }
 });

@@ -144,6 +144,22 @@ const STRATEGIES: StrategyStats[] = [
     description: 'SL movido para entrada após TP1 – risco zero residual',
     bestTF: 'ALL',
   },
+  {
+    id: 'suntzu',
+    name: 'Sun Tzu',
+    emoji: '🏮',
+    color: '#A855F7',
+    winRateTotal: 71,
+    winRateLongs: 74,
+    winRateShorts: 68,
+    signalsPerYear: 89,
+    signalsLong: 51,
+    signalsShort: 38,
+    avgRR: 2.4,
+    status: 'HOT',
+    description: 'Infiltração na EMA200 + Modo Surfe até exaustão M15',
+    bestTF: 'M5/M15',
+  },
 ];
 
 // ─── Equity curve ─────────────────────────────────────────────────────────────
@@ -206,6 +222,163 @@ interface LiveBacktestData {
 }
 
 const BACKTEST_SYMBOLS = ['BTC', 'ETH', 'SOL'];
+
+// ─── Sun Tzu Live Backtest Panel ──────────────────────────────────────────────
+
+function SunTzuLivePanel() {
+  const [symbol, setSymbol] = useState('BTC');
+  const [data, setData] = useState<LiveBacktestData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cached, setCached] = useState(false);
+
+  const load = useCallback(async (sym: string) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res  = await fetch(`${BASE}/api/backtest/suntzu?symbol=${sym}`);
+      const json = await res.json() as { ok: boolean; data: LiveBacktestData; cached: boolean; error?: string };
+      if (!json.ok) throw new Error(json.error ?? 'Erro desconhecido');
+      setData(json.data);
+      setCached(json.cached);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(symbol); }, [symbol, load]);
+
+  const hourChartData = useMemo(() => {
+    if (!data) return [];
+    return Array.from({ length: 24 }, (_, h) => {
+      const s = data.hourStats[h];
+      return { hour: `${String(h).padStart(2, '0')}h`, wr: s ? s.winRate : null, signals: s ? s.signals : 0, low: data.lowAssertivityHours.includes(h) };
+    });
+  }, [data]);
+
+  const wrColor = (wr: number | null) => {
+    if (wr === null) return '#374151';
+    if (wr >= 65) return '#A855F7';
+    if (wr >= 50) return '#F59E0B';
+    return '#EF4444';
+  };
+
+  return (
+    <GlassCard className="p-4 flex flex-col gap-3 shrink-0">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🏮</span>
+          <div>
+            <div className="font-black text-sm text-white tracking-wide">Sun Tzu · Assertividade Real (1 ano)</div>
+            <div className="text-[10px] text-muted-foreground">Dados reais · OKX H4 · Filtro RSI+Vol+EMA · Alvo 1%</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1">
+            {BACKTEST_SYMBOLS.map(s => (
+              <button key={s} onClick={() => setSymbol(s)}
+                className={cn("px-2 py-0.5 rounded text-[10px] font-bold border transition-colors",
+                  symbol === s ? "bg-purple-900/60 border-purple-500 text-purple-300" : "border-border text-muted-foreground hover:border-purple-500/50"
+                )}>{s}</button>
+            ))}
+          </div>
+          <button onClick={() => load(symbol)} disabled={loading}
+            className="p-1.5 rounded border border-border text-muted-foreground hover:text-white hover:border-primary/50 transition-colors disabled:opacity-40">
+            {loading ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+          </button>
+        </div>
+      </div>
+
+      {loading && !data && (
+        <div className="flex flex-col items-center gap-2 py-6 text-muted-foreground">
+          <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+          <div className="text-xs">Calculando Sun Tzu em 365 dias H4…</div>
+          <div className="text-[10px] opacity-60">Primeira vez pode levar 10–30 segundos</div>
+        </div>
+      )}
+
+      {error && (
+        <div className="flex items-center gap-2 p-3 rounded-lg bg-red-900/20 border border-red-500/30 text-red-400 text-xs">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Erro: {error}</span>
+        </div>
+      )}
+
+      {data && !loading && (
+        <>
+          <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+            <CheckCircle2 className="w-3 h-3 text-purple-400" />
+            <span>{data.daysAnalyzed} dias · {data.totalSignals} sinais filtrados · {cached ? 'Cache' : 'Recém calculado'} · {data.lastUpdated}</span>
+          </div>
+
+          {/* Sun Tzu filter info */}
+          <div className="p-2.5 rounded-lg bg-purple-900/20 border border-purple-500/30 text-[11px] text-purple-300">
+            <span className="font-black">🏮 Filtro Sniper Sun Tzu: </span>
+            EMA200 cruzado + RSI(6) {'>'} 60 + Volume {'>'} 1.5× + EMA9 {'>'} EMA21
+          </div>
+
+          <div className="grid grid-cols-4 gap-2">
+            <StatBox label="Win Rate Real" value={`${data.winRate}%`}
+              color={data.winRate >= 65 ? 'text-purple-400' : data.winRate >= 50 ? 'text-yellow-400' : 'text-red-400'}
+              sub={`${data.wins}W / ${data.losses}L`} />
+            <StatBox label="Lucro Acum." value={`${data.accumulatedProfitPct > 0 ? '+' : ''}${data.accumulatedProfitPct}%`}
+              color={data.accumulatedProfitPct > 0 ? 'text-purple-400' : 'text-red-400'} sub="Alvo 1% / trade" />
+            <StatBox label="Filtrados" value={String(data.skipped)}
+              color="text-muted-foreground" sub={`${data.totalSignals} válidos`} />
+            <StatBox label="RR Médio" value={`1:${data.avgRR.toFixed(2)}`}
+              color="text-cyan-400" sub="Risco/Retorno" />
+          </div>
+
+          {data.lowAssertivityHours.length > 0 && (
+            <div className="flex items-start gap-2 p-2.5 rounded-lg bg-amber-900/20 border border-amber-500/30">
+              <AlertTriangle className="w-3.5 h-3.5 text-amber-400 mt-0.5 shrink-0" />
+              <div className="text-[11px]">
+                <span className="font-black text-amber-400">Horários de Baixa Assertividade: </span>
+                <span className="text-amber-300">
+                  {data.lowAssertivityHours.sort((a, b) => a - b).map(h => `${String(h).padStart(2, '0')}h`).join(', ')} (Brasília)
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <Clock className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10px] font-black text-muted-foreground tracking-widest">WIN RATE POR HORA (BRASÍLIA) — H4 BACKTEST SUN TZU</span>
+            </div>
+            <div className="h-28">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={hourChartData} margin={{ top: 2, right: 2, left: -24, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 8, fill: '#555' }} tickLine={false} interval={1} />
+                  <YAxis domain={[0, 100]} tick={{ fontSize: 8, fill: '#555' }} tickLine={false} tickFormatter={v => `${v}%`} />
+                  <Tooltip content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const wr = payload[0]?.value as number | null;
+                    const d = hourChartData.find(h => h.hour === label);
+                    return (
+                      <div className="bg-card border border-border rounded p-2 text-xs shadow-xl">
+                        <div className="font-bold text-muted-foreground">{label}</div>
+                        {wr !== null ? <><div style={{ color: wrColor(wr) }}>WR: {wr}%</div><div className="text-muted-foreground">{d?.signals} sinais</div></> : <div className="text-muted-foreground">Sem sinais</div>}
+                      </div>
+                    );
+                  }} />
+                  <Bar dataKey="wr" radius={[2, 2, 0, 0]} maxBarSize={18}>
+                    {hourChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.wr === null ? '#1f2937' : wrColor(entry.wr)} opacity={entry.signals === 0 ? 0.3 : 1} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </>
+      )}
+    </GlassCard>
+  );
+}
 
 // ─── Real Surfe 200 backtest panel ────────────────────────────────────────────
 
@@ -488,7 +661,8 @@ export function BacktestHub() {
     directionFilter === 'short' ? activeStrategy.signalsShort :
     activeStrategy.signalsPerYear;
 
-  const isSurfe = activeStrategy.id === 'surfe';
+  const isSurfe  = activeStrategy.id === 'surfe';
+  const isSunTzu = activeStrategy.id === 'suntzu';
 
   return (
     <div className="flex-1 flex flex-col gap-2 overflow-hidden p-2">
@@ -666,8 +840,9 @@ export function BacktestHub() {
             </div>
           </GlassCard>
 
-          {/* ── Real Surfe 200 backtest panel (only when Surfe 200 is selected) ── */}
-          {isSurfe && <Surfe200LivePanel />}
+          {/* ── Live backtest panels (only when the respective strategy is selected) ── */}
+          {isSurfe  && <Surfe200LivePanel />}
+          {isSunTzu && <SunTzuLivePanel />}
 
           {/* Equity curve */}
           <GlassCard className="flex-1 p-3 flex flex-col min-h-0 overflow-hidden" style={{ minHeight: 200 }}>
