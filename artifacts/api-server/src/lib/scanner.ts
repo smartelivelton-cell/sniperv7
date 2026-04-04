@@ -2,6 +2,7 @@ import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
 import { isLowAssertivityHour } from "./backtestState";
 import { logWin } from "./winsLog";
+import { isSymbolBlocked, registerTrade, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
 import {
   calculateEMA,
   calculateRSI,
@@ -189,26 +190,30 @@ function analyzeP50(bids: [number,number][], asks: [number,number][], price: num
 }
 
 // ── Telegram sender ────────────────────────────────────────────────────────────
-async function sendTg(text: string): Promise<void> {
+async function sendTg(text: string, replyMarkup?: object): Promise<number | null> {
   const token  = process.env.TELEGRAM_TOKEN  || process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.CHAT_ID         || process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
     logger.warn("Scanner: Telegram credentials not configured — skipping send");
-    return;
+    return null;
   }
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
       signal:  AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       const body = await res.text();
       logger.warn({ body }, "Scanner: Telegram non-OK response");
+      return null;
     }
+    const json: any = await res.json();
+    return json?.result?.message_id ?? null;
   } catch (err: any) {
     logger.warn({ err: err.message }, "Scanner: Telegram send failed");
+    return null;
   }
 }
 
@@ -428,8 +433,7 @@ async function checkActiveSignals(symbol: string, price: number): Promise<void> 
       logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
         tpLevel: 1, profitPct: tp1Pct, leverage: sig.leverage,
         avgEntry: sig.avgEntry, tpPrice: sig.tp1 });
-      await sendTg(buildWinMsg(sig, 1));
-      notifySignalSent();
+      if (!isSymbolBlocked(sig.symbol)) { await sendTg(buildWinMsg(sig, 1)); notifySignalSent(); }
     }
     if (sig.tp1Hit && !sig.tp2Hit && ((isLong && price >= sig.tp2) || (!isLong && price <= sig.tp2))) {
       sig.tp2Hit = true;
@@ -437,8 +441,7 @@ async function checkActiveSignals(symbol: string, price: number): Promise<void> 
       logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
         tpLevel: 2, profitPct: tp2Pct, leverage: sig.leverage,
         avgEntry: sig.avgEntry, tpPrice: sig.tp2 });
-      await sendTg(buildWinMsg(sig, 2));
-      notifySignalSent();
+      if (!isSymbolBlocked(sig.symbol)) { await sendTg(buildWinMsg(sig, 2)); notifySignalSent(); }
     }
     if (sig.tp2Hit && !sig.tp3Hit && ((isLong && price >= sig.tp3) || (!isLong && price <= sig.tp3))) {
       sig.tp3Hit = true;
@@ -446,8 +449,7 @@ async function checkActiveSignals(symbol: string, price: number): Promise<void> 
       logWin({ symbol: sig.symbol, strategy: sig.strategy, direction: sig.direction,
         tpLevel: 3, profitPct: tp3Pct, leverage: sig.leverage,
         avgEntry: sig.avgEntry, tpPrice: sig.tp3 });
-      await sendTg(buildWinMsg(sig, 3));
-      notifySignalSent();
+      if (!isSymbolBlocked(sig.symbol)) { await sendTg(buildWinMsg(sig, 3)); notifySignalSent(); }
       activeSignals.delete(id);
     }
   }
@@ -885,6 +887,12 @@ async function scanCoin(symbol: string): Promise<void> {
     }
 
     if (!seenIds.has(id)) {
+      // ── Captain Mode: block if escort active for this coin ──────────────────
+      if (isSymbolBlocked(symbol)) {
+        logger.info({ symbol }, "Scanner: signal suprimido — Modo Escolta ativo para esta moeda");
+        return;
+      }
+
       seenIds.add(id);
       cooldownMap.set(symbol, now);
       lastSignalDirMap.set(symbol, { direction, ts: now });
@@ -899,8 +907,15 @@ async function scanCoin(symbol: string): Promise<void> {
       const lowAssertivity   = isSurfe200Signal && isLowAssertivityHour(symbol);
       if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
 
+      // Register trade data for ATIRAR callback
+      registerTrade({ symbol, direction, avgEntry, sl, tp1, tp2, tp3 });
+
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
-      await sendTg(buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning));
+      const msgId = await sendTg(
+        buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning),
+        buildAtiraKeyboard(symbol, direction),
+      );
+      if (msgId !== null) trackSignalMessage(msgId);
       notifySignalSent();
     }
   } catch (err: any) {

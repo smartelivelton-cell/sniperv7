@@ -1,5 +1,6 @@
 import { logger } from "./logger";
 import { notifySignalSent } from "./heartbeat";
+import { isSymbolBlocked, registerTrade, trackSignalMessage, buildAtiraKeyboard } from "./captainMode";
 import {
   calculateEMA,
   calculateRSI,
@@ -126,26 +127,30 @@ function getP50Price(bids: [number, number][], asks: [number, number][], fallbac
 }
 
 // ── Telegram ───────────────────────────────────────────────────────────────────
-async function sendTg(text: string): Promise<void> {
+async function sendTg(text: string, replyMarkup?: object): Promise<number | null> {
   const token  = process.env.TELEGRAM_TOKEN  || process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.CHAT_ID         || process.env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) {
     logger.warn("TankScanner: Telegram credentials not set");
-    return;
+    return null;
   }
   try {
     const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
       method:  "POST",
       headers: { "Content-Type": "application/json" },
-      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML" }),
+      body:    JSON.stringify({ chat_id: chatId, text, parse_mode: "HTML", ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),
       signal:  AbortSignal.timeout(8_000),
     });
     if (!res.ok) {
       const body = await res.text();
       logger.warn({ body }, "TankScanner: Telegram non-OK response");
+      return null;
     }
+    const json: any = await res.json();
+    return json?.result?.message_id ?? null;
   } catch (err: any) {
     logger.warn({ err: err.message }, "TankScanner: Telegram send failed");
+    return null;
   }
 }
 
@@ -387,25 +392,37 @@ async function scanTank(symbol: string): Promise<void> {
   const atr = calculateATR(m5s.slice(-20));
 
   if (longScore >= MIN_SCORE && longScore >= shortScore) {
+    if (isSymbolBlocked(symbol)) {
+      logger.info({ symbol }, "TankScanner: LONG suprimido — Modo Escolta ativo para esta moeda");
+      return;
+    }
     const slDist = Math.max(atr * 1.5, price * 0.005);
     const sl     = price - slDist;
     const tp1    = price + slDist;
     const tp2    = price + slDist * 2;
     const tp3    = price + slDist * 3;
     cooldownMap.set(symbol, Date.now());
+    registerTrade({ symbol, direction: "LONG", avgEntry: price, sl, tp1, tp2, tp3 });
     logger.info({ symbol, score: longScore }, "TankScanner: LONG sinal TANQUE disparado");
-    await sendTg(buildTankMsg(symbol, "LONG", longScore, price, ema9, ema200, p50, vwap, volRatio, longVotes, sl, tp1, tp2, tp3));
+    const tankMsgId = await sendTg(buildTankMsg(symbol, "LONG", longScore, price, ema9, ema200, p50, vwap, volRatio, longVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard(symbol, "LONG"));
+    if (tankMsgId !== null) trackSignalMessage(tankMsgId);
     notifySignalSent();
 
   } else if (shortScore >= MIN_SCORE) {
+    if (isSymbolBlocked(symbol)) {
+      logger.info({ symbol }, "TankScanner: SHORT suprimido — Modo Escolta ativo para esta moeda");
+      return;
+    }
     const slDist = Math.max(atr * 1.5, price * 0.005);
     const sl     = price + slDist;
     const tp1    = price - slDist;
     const tp2    = price - slDist * 2;
     const tp3    = price - slDist * 3;
     cooldownMap.set(symbol, Date.now());
+    registerTrade({ symbol, direction: "SHORT", avgEntry: price, sl, tp1, tp2, tp3 });
     logger.info({ symbol, score: shortScore }, "TankScanner: SHORT sinal TANQUE disparado");
-    await sendTg(buildTankMsg(symbol, "SHORT", shortScore, price, ema9, ema200, p50, vwap, volRatio, shortVotes, sl, tp1, tp2, tp3));
+    const tankMsgId = await sendTg(buildTankMsg(symbol, "SHORT", shortScore, price, ema9, ema200, p50, vwap, volRatio, shortVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard(symbol, "SHORT"));
+    if (tankMsgId !== null) trackSignalMessage(tankMsgId);
     notifySignalSent();
   }
 }

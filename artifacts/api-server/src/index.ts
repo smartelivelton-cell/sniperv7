@@ -7,6 +7,35 @@ import { startSunTzuScanner } from "./lib/sunTzuScanner";
 import { startOKXTimeSync } from "./lib/okxTime";
 import { warmUpBacktest } from "./routes/backtest/index";
 
+async function setupTelegramWebhook(): Promise<void> {
+  const token = process.env.TELEGRAM_TOKEN || process.env.TELEGRAM_BOT_TOKEN;
+  if (!token) { logger.warn("Webhook: TELEGRAM_TOKEN não configurado — webhook não registrado"); return; }
+
+  const domain = process.env.WEBHOOK_DOMAIN || process.env.REPLIT_DEV_DOMAIN;
+  if (!domain) { logger.warn("Webhook: REPLIT_DEV_DOMAIN não configurado — webhook não registrado"); return; }
+
+  const webhookUrl = domain.startsWith("http")
+    ? `${domain}/api/webhook/telegram`
+    : `https://${domain}/api/webhook/telegram`;
+
+  try {
+    const res  = await fetch(`https://api.telegram.org/bot${token}/setWebhook`, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      body:    JSON.stringify({ url: webhookUrl, drop_pending_updates: true }),
+      signal:  AbortSignal.timeout(10_000),
+    });
+    const json: any = await res.json();
+    if (json.ok) {
+      logger.info({ webhookUrl }, "Webhook: Telegram webhook registrado com sucesso — botão ATIRAR ativo");
+    } else {
+      logger.warn({ json }, "Webhook: falha ao registrar Telegram webhook");
+    }
+  } catch (err: any) {
+    logger.warn({ err: err.message }, "Webhook: erro ao registrar Telegram webhook");
+  }
+}
+
 const rawPort = process.env["PORT"];
 
 if (!rawPort) {
@@ -34,4 +63,5 @@ app.listen(port, (err) => {
   startTankScanner();
   startSunTzuScanner();
   warmUpBacktest();
+  setupTelegramWebhook().catch(err => logger.warn({ err: err.message }, "Webhook: setup error"));
 });
