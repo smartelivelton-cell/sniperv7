@@ -915,7 +915,7 @@ async function scanCoin(symbol: string): Promise<void> {
         buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning),
         buildAtiraKeyboard(symbol, direction),
       );
-      if (msgId !== null) trackSignalMessage(msgId);
+      if (msgId !== null) trackSignalMessage(symbol, msgId);
       notifySignalSent();
     }
   } catch (err: any) {

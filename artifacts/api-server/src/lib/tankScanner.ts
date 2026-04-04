@@ -405,7 +405,7 @@ async function scanTank(symbol: string): Promise<void> {
     registerTrade({ symbol, direction: "LONG", avgEntry: price, sl, tp1, tp2, tp3 });
     logger.info({ symbol, score: longScore }, "TankScanner: LONG sinal TANQUE disparado");
     const tankMsgId = await sendTg(buildTankMsg(symbol, "LONG", longScore, price, ema9, ema200, p50, vwap, volRatio, longVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard(symbol, "LONG"));
-    if (tankMsgId !== null) trackSignalMessage(tankMsgId);
+    if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
     notifySignalSent();
 
   } else if (shortScore >= MIN_SCORE) {
@@ -422,7 +422,7 @@ async function scanTank(symbol: string): Promise<void> {
     registerTrade({ symbol, direction: "SHORT", avgEntry: price, sl, tp1, tp2, tp3 });
     logger.info({ symbol, score: shortScore }, "TankScanner: SHORT sinal TANQUE disparado");
     const tankMsgId = await sendTg(buildTankMsg(symbol, "SHORT", shortScore, price, ema9, ema200, p50, vwap, volRatio, shortVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard(symbol, "SHORT"));
-    if (tankMsgId !== null) trackSignalMessage(tankMsgId);
+    if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
     notifySignalSent();
   }
 }

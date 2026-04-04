@@ -389,7 +389,7 @@ async function scanSunTzu(symbol: string): Promise<void> {
 
         logger.info({ symbol, direction, lsRatio, lsFalling }, "SunTzu: Nível 2 — Antecipação 80%");
         const msgId = await sendTg(msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger), buildAtiraKeyboard(symbol, direction));
-        if (msgId !== null) trackSignalMessage(msgId);
+        if (msgId !== null) trackSignalMessage(symbol, msgId);
         notifySignalSent();
       }
     }
@@ -445,7 +445,7 @@ async function scanSunTzu(symbol: string): Promise<void> {
 
       logger.info({ symbol, direction: dir3, score: "3/3", volRatio: volRatio.toFixed(2) }, "SunTzu: Nível 3 — Confirmação Sun Tzu");
       const msgId3 = await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3), buildAtiraKeyboard(symbol, dir3));
-      if (msgId3 !== null) trackSignalMessage(msgId3);
+      if (msgId3 !== null) trackSignalMessage(symbol, msgId3);
       notifySignalSent();
     }
   }
