@@ -390,8 +390,14 @@ async function scanSunTzu(symbol: string): Promise<void> {
         const estTp2 = direction === "LONG" ? entryTrigger + slPct * 2 : entryTrigger - slPct * 2;
         const estTp3 = direction === "LONG" ? entryTrigger + slPct * 3 : entryTrigger - slPct * 3;
 
-        // Guard: abort if any price field is invalid
-        if (entryTrigger <= 0 || estSl <= 0 || estTp1 <= 0 || estTp2 <= 0 || estTp3 <= 0) {
+        // Guard: abort before sendTg if any price field is invalid
+        if (
+          !Number.isFinite(entryTrigger) || entryTrigger <= 0 ||
+          !Number.isFinite(estSl)        || estSl        <= 0 ||
+          !Number.isFinite(estTp1)       || estTp1       <= 0 ||
+          !Number.isFinite(estTp2)       || estTp2       <= 0 ||
+          !Number.isFinite(estTp3)       || estTp3       <= 0
+        ) {
           logger.error({ symbol, direction, entryTrigger, estSl, estTp1 }, "SunTzu: Nível 2 abortado — SL ou TP inválido (zero/NaN)");
           return;
         }
@@ -430,11 +436,28 @@ async function scanSunTzu(symbol: string): Promise<void> {
       const c2  = ema200;
       const avg = c1 * 0.40 + c2 * 0.60;
 
-      // Store active position
+      // Compute SL/TP from trailSL distance for ATIRAR callback
       const trailSL = dir3 === "LONG"
         ? m15s[m15s.length - 2].low   // previous M15 low
         : m15s[m15s.length - 2].high; // previous M15 high
+      const slDist  = Math.abs(avg - trailSL);
+      const tp1Lvl3 = dir3 === "LONG" ? avg + slDist     : avg - slDist;
+      const tp2Lvl3 = dir3 === "LONG" ? avg + slDist * 2 : avg - slDist * 2;
+      const tp3Lvl3 = dir3 === "LONG" ? avg + slDist * 3 : avg - slDist * 3;
 
+      // Guard: abort before any state mutation if price fields are invalid
+      if (
+        !Number.isFinite(avg)      || avg      <= 0 ||
+        !Number.isFinite(trailSL)  || trailSL  <= 0 ||
+        !Number.isFinite(tp1Lvl3)  || tp1Lvl3  <= 0 ||
+        !Number.isFinite(tp2Lvl3)  || tp2Lvl3  <= 0 ||
+        !Number.isFinite(tp3Lvl3)  || tp3Lvl3  <= 0
+      ) {
+        logger.error({ symbol, direction: dir3, avg, trailSL, tp1Lvl3 }, "SunTzu: Nível 3 abortado — SL ou TP inválido (zero/NaN)");
+        return;
+      }
+
+      // Store active position (only after values are validated)
       activePositions.set(symbol, {
         symbol, direction: dir3,
         entry: c1, c2, avgEntry: avg,
@@ -445,19 +468,6 @@ async function scanSunTzu(symbol: string): Promise<void> {
 
       if (isSymbolBlocked(symbol)) {
         logger.info({ symbol }, "SunTzu: Nível 3 suprimido — Modo Escolta ativo para esta moeda");
-        return;
-      }
-
-      // Compute SL/TP from trailSL distance for ATIRAR callback
-      const slDist = Math.abs(avg - trailSL);
-      const tp1Lvl3 = dir3 === "LONG" ? avg + slDist     : avg - slDist;
-      const tp2Lvl3 = dir3 === "LONG" ? avg + slDist * 2 : avg - slDist * 2;
-      const tp3Lvl3 = dir3 === "LONG" ? avg + slDist * 3 : avg - slDist * 3;
-
-
-      // Guard: abort if any price field is invalid
-      if (avg <= 0 || trailSL <= 0 || tp1Lvl3 <= 0 || tp2Lvl3 <= 0 || tp3Lvl3 <= 0) {
-        logger.error({ symbol, direction: dir3, avg, trailSL, tp1Lvl3 }, "SunTzu: Nível 3 abortado — SL ou TP inválido (zero/NaN)");
         return;
       }
 

@@ -867,6 +867,19 @@ async function scanCoin(symbol: string): Promise<void> {
     const entry2   = direction === "LONG" ? Math.min(curr21, curr9) : Math.max(curr21, curr9);
     const avgEntry = (price + entry2) / 2;
     const { sl, tp1, tp2, tp3 } = calcSlTp(price, direction, atr);
+
+    // Guard: abort before any state mutation if price fields are invalid
+    if (
+      !Number.isFinite(avgEntry) || avgEntry <= 0 ||
+      !Number.isFinite(sl)       || sl       <= 0 ||
+      !Number.isFinite(tp1)      || tp1      <= 0 ||
+      !Number.isFinite(tp2)      || tp2      <= 0 ||
+      !Number.isFinite(tp3)      || tp3      <= 0
+    ) {
+      logger.error({ symbol, direction, avgEntry, sl, tp1 }, "Scanner: sinal abortado — SL ou TP inválido (zero/NaN)");
+      return;
+    }
+
     const id = `${symbol}-${direction}-${Math.floor(now / COOLDOWN_MS)}`;
 
     // ── Filtro de Direção Majoritária ──────────────────────────────────────────
@@ -906,12 +919,6 @@ async function scanCoin(symbol: string): Promise<void> {
       const isSurfe200Signal = strategies.includes("Surfe 200");
       const lowAssertivity   = isSurfe200Signal && isLowAssertivityHour(symbol);
       if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
-
-      // Guard: abort if any price field is invalid
-      if (avgEntry <= 0 || sl <= 0 || tp1 <= 0 || tp2 <= 0 || tp3 <= 0 || isNaN(avgEntry) || isNaN(sl) || isNaN(tp1)) {
-        logger.error({ symbol, direction, avgEntry, sl, tp1 }, "Scanner: sinal abortado — SL ou TP inválido (zero/NaN)");
-        return;
-      }
 
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
       const msgId = await sendTg(
