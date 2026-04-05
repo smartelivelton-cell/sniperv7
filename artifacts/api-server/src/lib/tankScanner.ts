@@ -403,10 +403,11 @@ async function scanTank(symbol: string): Promise<void> {
     const tp3    = price + slDist * 3;
     cooldownMap.set(symbol, Date.now());
 
-    logger.info({ symbol, score: longScore }, "TankScanner: LONG sinal TANQUE disparado");
-    const tankMsgId = await sendTg(buildTankMsg(symbol, "LONG", longScore, price, ema9, ema200, p50, vwap, volRatio, longVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard({ symbol, direction: "LONG", avgEntry: price, sl, tp1, tp2, tp3 }));
-    if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
-    notifySignalSent();
+    logger.info({ symbol, score: longScore }, "TankScanner: LONG sinal TANQUE disparado (Telegram silenciado por ordem do Capitão)");
+    // Telegram notification disabled — Tank Scanner signals are log-only
+    // const tankMsgId = await sendTg(buildTankMsg(symbol, "LONG", longScore, price, ema9, ema200, p50, vwap, volRatio, longVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard({ symbol, direction: "LONG", avgEntry: price, sl, tp1, tp2, tp3 }));
+    // if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
+    // notifySignalSent();
 
   } else if (shortScore >= MIN_SCORE) {
     if (isSymbolBlocked(symbol)) {
@@ -420,10 +421,11 @@ async function scanTank(symbol: string): Promise<void> {
     const tp3    = price - slDist * 3;
     cooldownMap.set(symbol, Date.now());
 
-    logger.info({ symbol, score: shortScore }, "TankScanner: SHORT sinal TANQUE disparado");
-    const tankMsgId = await sendTg(buildTankMsg(symbol, "SHORT", shortScore, price, ema9, ema200, p50, vwap, volRatio, shortVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard({ symbol, direction: "SHORT", avgEntry: price, sl, tp1, tp2, tp3 }));
-    if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
-    notifySignalSent();
+    logger.info({ symbol, score: shortScore }, "TankScanner: SHORT sinal TANQUE disparado (Telegram silenciado por ordem do Capitão)");
+    // Telegram notification disabled — Tank Scanner signals are log-only
+    // const tankMsgId = await sendTg(buildTankMsg(symbol, "SHORT", shortScore, price, ema9, ema200, p50, vwap, volRatio, shortVotes, sl, tp1, tp2, tp3), buildAtiraKeyboard({ symbol, direction: "SHORT", avgEntry: price, sl, tp1, tp2, tp3 }));
+    // if (tankMsgId !== null) trackSignalMessage(symbol, tankMsgId);
+    // notifySignalSent();
   }
 }
 

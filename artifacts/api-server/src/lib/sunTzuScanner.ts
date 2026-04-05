@@ -193,13 +193,17 @@ function msgLevel1(symbol: string, price: number, ema200: number, rsi: number, d
 function msgLevel2(
   symbol: string, price: number, ema200: number, rsi: number,
   lsRatio: number, lsRatioPrev: number, entryTrigger: number,
+  direction: "LONG" | "SHORT",
 ): string {
   const lsFalling = lsRatio < lsRatioPrev;
+  const dirLabel  = direction === "LONG" ? "🟢 LONG (COMPRA)" : "🔴 SHORT (VENDA)";
+  const dirEmoji  = direction === "LONG" ? "📈" : "📉";
   return (
     `🏮 <b>SUN TZU: VENCER SEM LUTAR</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `⏳ <b>NÍVEL 2 — ANTECIPAÇÃO 80%</b>\n` +
     `🪙 ${symbol}-USDT-SWAP\n` +
+    `${dirEmoji} DIREÇÃO: <b>${dirLabel}</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🧠 <b>INTELIGÊNCIA:</b>\n` +
     `• Candle M5 fechou cruzando a EMA200!\n` +
@@ -208,7 +212,7 @@ function msgLevel2(
     `• EMA200: <b>${fmt(ema200)}</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🎯 <b>PREÇO EXATO DE ENTRADA:</b> <b>${fmt(entryTrigger)}</b>\n` +
-    `(Máxima do candle anterior + 0.01%)\n` +
+    `(${direction === "LONG" ? "Máxima" : "Mínima"} do candle anterior ${direction === "LONG" ? "+" : "-"} 0.01%)\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `⚡ A Muralha está sendo infiltrada. Aguarde a Confirmação Sun Tzu (Nível 3).\n` +
     `⏰ ${nowBR()} (Brasília)`
@@ -386,9 +390,15 @@ async function scanSunTzu(symbol: string): Promise<void> {
         const estTp2 = direction === "LONG" ? entryTrigger + slPct * 2 : entryTrigger - slPct * 2;
         const estTp3 = direction === "LONG" ? entryTrigger + slPct * 3 : entryTrigger - slPct * 3;
 
+        // Guard: abort if any price field is invalid
+        if (entryTrigger <= 0 || estSl <= 0 || estTp1 <= 0 || estTp2 <= 0 || estTp3 <= 0) {
+          logger.error({ symbol, direction, entryTrigger, estSl, estTp1 }, "SunTzu: Nível 2 abortado — SL ou TP inválido (zero/NaN)");
+          return;
+        }
+
         logger.info({ symbol, direction, lsRatio, lsFalling }, "SunTzu: Nível 2 — Antecipação 80%");
         const msgId = await sendTg(
-          msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger),
+          msgLevel2(symbol, price, ema200, currRsi, lsRatio, lsRatioPrev, entryTrigger, direction),
           buildAtiraKeyboard({ symbol, direction, avgEntry: entryTrigger, sl: estSl, tp1: estTp1, tp2: estTp2, tp3: estTp3 }),
         );
         if (msgId !== null) trackSignalMessage(symbol, msgId);
@@ -444,6 +454,12 @@ async function scanSunTzu(symbol: string): Promise<void> {
       const tp2Lvl3 = dir3 === "LONG" ? avg + slDist * 2 : avg - slDist * 2;
       const tp3Lvl3 = dir3 === "LONG" ? avg + slDist * 3 : avg - slDist * 3;
 
+
+      // Guard: abort if any price field is invalid
+      if (avg <= 0 || trailSL <= 0 || tp1Lvl3 <= 0 || tp2Lvl3 <= 0 || tp3Lvl3 <= 0) {
+        logger.error({ symbol, direction: dir3, avg, trailSL, tp1Lvl3 }, "SunTzu: Nível 3 abortado — SL ou TP inválido (zero/NaN)");
+        return;
+      }
 
       logger.info({ symbol, direction: dir3, score: "3/3", volRatio: volRatio.toFixed(2) }, "SunTzu: Nível 3 — Confirmação Sun Tzu");
       const msgId3 = await sendTg(msgLevel3(symbol, price, ema200, ema9, ema21, currRsi, volRatio, c1, c2, avg, dir3), buildAtiraKeyboard({ symbol, direction: dir3, avgEntry: avg, sl: trailSL, tp1: tp1Lvl3, tp2: tp2Lvl3, tp3: tp3Lvl3 }));
