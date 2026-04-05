@@ -907,6 +907,12 @@ async function scanCoin(symbol: string): Promise<void> {
       const lowAssertivity   = isSurfe200Signal && isLowAssertivityHour(symbol);
       if (lowAssertivity) logger.info({ symbol }, "Scanner: Surfe 200 low assertivity hour → warning added");
 
+      // Guard: abort if any price field is invalid
+      if (avgEntry <= 0 || sl <= 0 || tp1 <= 0 || tp2 <= 0 || tp3 <= 0 || isNaN(avgEntry) || isNaN(sl) || isNaN(tp1)) {
+        logger.error({ symbol, direction, avgEntry, sl, tp1 }, "Scanner: sinal abortado — SL ou TP inválido (zero/NaN)");
+        return;
+      }
+
       logger.info({ symbol, direction, strategy, price }, "Scanner: signal fired → Telegram");
       const msgId = await sendTg(
         buildSignalMsg(sig, reason, multiTrend, count, isHighProb, lowAssertivity, btcContraWarning),

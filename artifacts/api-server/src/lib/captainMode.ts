@@ -277,6 +277,31 @@ export async function handleAtirar(
     return;
   }
 
+  // ── Guard: validate trade data before starting escort ─────────────────────
+  // Old-format buttons (pre-fix) or zero-price API failures will have zeros.
+  // Attempt to recover using the live OKX price with a 1% SL/TP rule.
+  let resolvedTrade = { ...trade };
+  if (resolvedTrade.avgEntry <= 0 || resolvedTrade.sl <= 0 || resolvedTrade.tp1 <= 0) {
+    logger.warn({ symbol, direction, trade }, "CaptainMode: valores zero detectados — tentando buscar preço ao vivo");
+    const livePrice = await fetchPrice(symbol);
+    if (!livePrice || livePrice <= 0) {
+      await tgAnswerCallback(callbackQueryId, `⚠️ Dados de ${symbol} inválidos e preço OKX indisponível. Aguarde o próximo sinal.`);
+      logger.warn({ symbol, direction }, "CaptainMode: ATIRAR abortado — preço ao vivo também indisponível");
+      return;
+    }
+    const slPct = livePrice * 0.01;
+    resolvedTrade = {
+      symbol,
+      direction,
+      avgEntry: livePrice,
+      sl:  direction === "LONG" ? livePrice - slPct : livePrice + slPct,
+      tp1: direction === "LONG" ? livePrice + slPct       : livePrice - slPct,
+      tp2: direction === "LONG" ? livePrice + slPct * 2   : livePrice - slPct * 2,
+      tp3: direction === "LONG" ? livePrice + slPct * 3   : livePrice - slPct * 3,
+    };
+    logger.info({ symbol, direction, livePrice }, "CaptainMode: valores reconstruídos com preço ao vivo (regra 1%)");
+  }
+
   // Delete only THIS coin's pending signal messages (other coins untouched)
   const coinMsgIds = pendingMsgsBySymbol.get(symbol) ?? [];
   logger.info({ symbol, direction, msgCount: coinMsgIds.length }, "CaptainMode: ATIRAR — deletando sinais de " + symbol);
@@ -287,18 +312,20 @@ export async function handleAtirar(
 
   // Start per-coin escort timer
   const timer = setInterval(() => runEscortUpdate(symbol), ESCORT_INTERVAL_MS);
-  escortMap.set(symbol, { trade: { ...trade }, riskZeroActivated: false, escortTimer: timer });
+  escortMap.set(symbol, { trade: resolvedTrade, riskZeroActivated: false, escortTimer: timer });
 
   const activeList = [...escortMap.keys()].join(", ");
   logger.info({ symbol, direction, ativos: activeList }, "CaptainMode: ATIVOS_EM_CURSO atualizado");
 
+  const dirLabel = direction === "LONG" ? "🟢 LONG" : "🔴 SHORT";
   await tgSend(
     `🚀 <b>CAPITÃO A BORDO!</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `🪙 Escolta iniciada: <b>${symbol}-USDT-SWAP</b>\n` +
-    `📍 Entrada Média: <b>${fmt(trade.avgEntry)}</b>\n` +
-    `🛡️ Stop Loss: <b>${fmt(trade.sl)}</b>\n` +
-    `🎯 TP1: <b>${fmt(trade.tp1)}</b> | TP2: <b>${fmt(trade.tp2)}</b> | TP3: <b>${fmt(trade.tp3)}</b>\n` +
+    `📍 Direção: <b>${dirLabel}</b>\n` +
+    `📍 Entrada Média: <b>${fmt(resolvedTrade.avgEntry)}</b>\n` +
+    `🛡️ Stop Loss: <b>${fmt(resolvedTrade.sl)}</b>\n` +
+    `🎯 TP1: <b>${fmt(resolvedTrade.tp1)}</b> | TP2: <b>${fmt(resolvedTrade.tp2)}</b> | TP3: <b>${fmt(resolvedTrade.tp3)}</b>\n` +
     `━━━━━━━━━━━━━━━━━━━━\n` +
     `📡 Atualização a cada 60s.\n` +
     `⏸️ Novos sinais de ${symbol} suspensos.\n` +
