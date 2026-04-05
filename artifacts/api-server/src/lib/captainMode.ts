@@ -281,7 +281,8 @@ export async function handleAtirar(
   // Old-format buttons (pre-fix) or zero-price API failures will have zeros.
   // Attempt to recover using the live OKX price with a 1% SL/TP rule.
   let resolvedTrade = { ...trade };
-  if (resolvedTrade.avgEntry <= 0 || resolvedTrade.sl <= 0 || resolvedTrade.tp1 <= 0) {
+  const isInvalid = (x: number) => !Number.isFinite(x) || x <= 0;
+  if (isInvalid(resolvedTrade.avgEntry) || isInvalid(resolvedTrade.sl) || isInvalid(resolvedTrade.tp1) || isInvalid(resolvedTrade.tp2) || isInvalid(resolvedTrade.tp3)) {
     logger.warn({ symbol, direction, trade }, "CaptainMode: valores zero detectados — tentando buscar preço ao vivo");
     const livePrice = await fetchPrice(symbol);
     if (!livePrice || livePrice <= 0) {
