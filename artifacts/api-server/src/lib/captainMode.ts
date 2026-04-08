@@ -151,16 +151,20 @@ async function runEscortUpdate(symbol: string): Promise<void> {
     return;
   }
 
-  // TP1 hit → Risk Zero protocol (only triggers once)
-  if (tp1Hit && !riskZeroActivated) {
+  // Risk Zero: dispara ao atingir 0.3% de lucro OU TP1 (o que vier primeiro)
+  const riskZeroTrigger = pnlPct >= 0.3 || tp1Hit;
+  if (riskZeroTrigger && !riskZeroActivated) {
     state.riskZeroActivated = true;
-    state.trade.sl = avgEntry;  // move SL to breakeven
+    state.trade.sl = avgEntry;  // move SL para breakeven
+    const triggerLabel = tp1Hit
+      ? `TP1 (<b>${fmt(tp1)}</b>) atingido`
+      : `Lucro de <b>+${pnlPct.toFixed(2)}%</b> atingido`;
     await tgSend(
       `🛡️ <b>PROTOCOLO RISCO ZERO ATIVADO!</b>\n` +
       `━━━━━━━━━━━━━━━━━━━━\n` +
-      `🪙 ${symbol}-USDT-SWAP | TP1 atingido! ✅\n` +
+      `🪙 ${symbol}-USDT-SWAP | ${triggerLabel}! ✅\n` +
       `Stop movido para o ponto de entrada: <b>${fmt(avgEntry)}</b>\n` +
-      `Lucro garantido, Capitão! 🎯\n` +
+      `Banca protegida, Capitão! 🎯\n` +
       `Próximo alvo: TP2 <b>${fmt(tp2)}</b>`,
     );
   }
