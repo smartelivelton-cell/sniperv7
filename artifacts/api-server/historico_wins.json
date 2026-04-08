@@ -768,5 +768,19 @@
     "timestamp": "2026-04-08T22:28:56.519Z",
     "timestampBR": "19:28:56",
     "dateBR": "08/04/2026"
+  },
+  {
+    "symbol": "POL",
+    "strategy": "Confirmação 100%",
+    "direction": "SHORT",
+    "tpLevel": 1,
+    "profitPct": 0.9406151273684967,
+    "leverage": 50,
+    "avgEntry": 0.08907643787817454,
+    "tpPrice": 0.08823857142857143,
+    "id": "POL-tp1-1775689398553",
+    "timestamp": "2026-04-08T23:03:18.553Z",
+    "timestampBR": "20:03:18",
+    "dateBR": "08/04/2026"
   }
 ]
