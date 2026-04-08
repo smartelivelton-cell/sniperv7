@@ -194,5 +194,19 @@
     "timestamp": "2026-04-04T19:15:20.628Z",
     "timestampBR": "16:15:20",
     "dateBR": "04/04/2026"
+  },
+  {
+    "symbol": "AXS",
+    "strategy": "Confirmação 100%",
+    "direction": "LONG",
+    "tpLevel": 1,
+    "profitPct": 1.5030528534764442,
+    "leverage": 50,
+    "avgEntry": 1.135695609027421,
+    "tpPrice": 1.1527657142857144,
+    "id": "AXS-tp1-1775613988762",
+    "timestamp": "2026-04-08T02:06:28.762Z",
+    "timestampBR": "23:06:28",
+    "dateBR": "07/04/2026"
   }
 ]
