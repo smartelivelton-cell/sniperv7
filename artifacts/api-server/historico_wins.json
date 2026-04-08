@@ -754,5 +754,19 @@
     "timestamp": "2026-04-08T07:31:29.608Z",
     "timestampBR": "04:31:29",
     "dateBR": "08/04/2026"
+  },
+  {
+    "symbol": "POL",
+    "strategy": "Onda SAR",
+    "direction": "SHORT",
+    "tpLevel": 1,
+    "profitPct": 0.6258613655408377,
+    "leverage": 25,
+    "avgEntry": 0.08962722790675937,
+    "tpPrice": 0.08906628571428572,
+    "id": "POL-tp1-1775687336519",
+    "timestamp": "2026-04-08T22:28:56.519Z",
+    "timestampBR": "19:28:56",
+    "dateBR": "08/04/2026"
   }
 ]

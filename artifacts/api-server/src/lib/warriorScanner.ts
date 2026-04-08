@@ -4,7 +4,7 @@
  * Strategy: VWAP filter + RSI(2) exhaustion + SAR flip after EMA200 break
  * Protocol: Wait for 2nd M5 candle with Volume Delta > 53%
  * Risk: TP 0.6% | SL 0.3% | Breakeven at 0.3% profit
- * Assets: BTC, ETH, SOL
+ * Assets: BTC, ETH, SOL, XRP, ADA, BNB, POL
  */
 
 import { logger } from "./logger";
@@ -17,7 +17,7 @@ import {
 } from "./indicators";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const WARRIOR_SYMBOLS   = ["BTC", "ETH", "SOL"];
+const WARRIOR_SYMBOLS   = ["BTC", "ETH", "SOL", "XRP", "ADA", "BNB", "POL"];
 const SCAN_INTERVAL_MS  = 20_000;
 const SAR_UPDATE_MS     = 2 * 60 * 1000;   // SAR narration every 2 min
 const TP_PCT            = 0.006;             // 0.6%
