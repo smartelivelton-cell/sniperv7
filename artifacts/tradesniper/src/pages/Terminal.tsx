@@ -3,7 +3,7 @@ import { Header } from '@/components/layout/Header';
 import { TradingViewWidget } from '@/components/charts/TradingViewWidget';
 import { ImageUploader } from '@/components/analysis/ImageUploader';
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel';
-import { SniperCalculator } from '@/components/calculator/SniperCalculator';
+import { AutomationPanel } from '@/components/automation/AutomationPanel';
 import { GoalsTracker } from '@/components/calculator/GoalsTracker';
 import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
@@ -13,18 +13,18 @@ import { WinsReport } from '@/components/wins/WinsReport';
 import { cn } from '@/lib/utils';
 import type { AnalysisResult } from '@workspace/api-client-react/src/generated/api.schemas';
 import { useCreateTrade } from '@workspace/api-client-react';
-import { LayoutDashboard, Eye, BarChart2, Bot, Radar, Calculator, ScrollText } from 'lucide-react';
+import { LayoutDashboard, Eye, BarChart2, Bot, Radar, Shield, ScrollText } from 'lucide-react';
 
 const SYMBOLS = ['BTC', 'ETH', 'SOL', 'DOGE', 'AXS', 'AVAX'];
 
 const TABS = [
-  { id: 'command',    label: 'Comando',     labelFull: 'Central de Comando',   icon: LayoutDashboard },
-  { id: 'vision',     label: 'IA',          labelFull: 'Visão IA',             icon: Eye },
-  { id: 'backtest',   label: 'Stats',       labelFull: 'Hub Estatísticas',     icon: BarChart2 },
-  { id: 'calculator', label: 'Calc',        labelFull: 'Calculadora',          icon: Calculator },
-  { id: 'scanner',    label: 'Scanner',     labelFull: 'Scanner V7',           icon: Radar },
-  { id: 'wins',       label: 'Relatório',   labelFull: 'Relatório de Hoje',    icon: ScrollText },
-  { id: 'copilot',    label: 'Copiloto',    labelFull: 'Copiloto Chat',        icon: Bot },
+  { id: 'command',    label: 'Comando',   labelFull: 'Central de Comando',  icon: LayoutDashboard },
+  { id: 'vision',     label: 'IA',        labelFull: 'Visão IA',            icon: Eye },
+  { id: 'backtest',   label: 'Stats',     labelFull: 'Hub Estatísticas',    icon: BarChart2 },
+  { id: 'warrior',    label: 'Warrior',   labelFull: 'THE WARRIOR',         icon: Shield },
+  { id: 'scanner',    label: 'Scanner',   labelFull: 'Scanner V7',          icon: Radar },
+  { id: 'wins',       label: 'Relatório', labelFull: 'Relatório de Hoje',   icon: ScrollText },
+  { id: 'copilot',    label: 'Copiloto',  labelFull: 'Copiloto Chat',       icon: Bot },
 ] as const;
 
 type TabId = typeof TABS[number]['id'];
@@ -98,6 +98,9 @@ export default function Terminal() {
               {tab.id === 'wins' && (
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
               )}
+              {tab.id === 'warrior' && (
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              )}
             </button>
           );
         })}
@@ -170,18 +173,12 @@ export default function Terminal() {
         <BacktestHub />
       </div>
 
-      {/* ── ABA 4: CALCULADORA & METAS ── */}
-      <div className={cn("flex-1 flex flex-col sm:flex-row overflow-hidden p-1.5 sm:p-2 gap-2", activeTab !== 'calculator' && "hidden")}>
-        <div className="w-full sm:w-[45%] overflow-y-auto">
-          <SniperCalculator
-            symbol={activeSymbol}
-            onSymbolChange={setActiveSymbol}
-            symbols={SYMBOLS}
-            aiResult={aiResult}
-            onExecuteTrade={handleExecuteTrade}
-          />
+      {/* ── ABA 4: THE WARRIOR — AUTOMAÇÃO ── */}
+      <div className={cn("flex-1 flex flex-col sm:flex-row overflow-hidden p-1.5 sm:p-2 gap-2", activeTab !== 'warrior' && "hidden")}>
+        <div className="w-full sm:w-[60%] overflow-hidden flex flex-col">
+          <AutomationPanel />
         </div>
-        <div className="w-full sm:w-[55%] overflow-y-auto">
+        <div className="w-full sm:w-[40%] overflow-y-auto">
           <GoalsTracker />
         </div>
       </div>
