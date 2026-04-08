@@ -2,7 +2,24 @@
 
 ## Overview
 
-Full-stack scalping platform for crypto assets. Dark mode industrial UI with live Binance WebSocket ticker, TradingView chart widgets, AI vision analysis (Claude), Sniper Calculator, AI Copilot chat, and Trade History with daily PNL tracking.
+Full-stack scalping platform for crypto assets. Dark mode industrial UI with live Binance WebSocket ticker, TradingView chart widgets, AI vision analysis (Claude), THE WARRIOR autonomous scanner, AI Copilot chat, and Trade History with daily PNL tracking.
+
+## THE WARRIOR — Autonomous Strategy (v1)
+
+Tab replacing the old "Calculadora" tab. Full autonomous operation mode:
+
+- **Triggers**: VWAP filter + RSI(2) exhaustion (<10 LONG / >90 SHORT) + SAR flip after EMA200 break
+- **2nd Candle Protocol**: waits for confirmed M5 breakout candle, then checks Volume Delta > 53% on next candle
+- **Risk**: TP 0.6% | SL 0.3% | Breakeven at 0.3% profit (Protocolo Risco Zero)
+- **Assets**: BTC, ETH, SOL on M5
+- **After WIN**: +1 operation allowed per day
+- **After LOSS**: Telegram YES/NO prompt asking user to continue
+- **SAR Narration**: sends SAR position update to Telegram every 2 minutes during active trade
+- **Telegram format**: `🪖 THE WARRIOR ATIVADO: [Asset] | [Direction] | 📊 Volume: [X]% | 🏹 Alvo: 0.6%`
+- **Automation Panel**: banca, leverage, daily goal config + per-strategy toggles + OKX futures balance
+- **OKX Balance**: needs OKX_API_KEY, OKX_SECRET_KEY, OKX_PASSPHRASE env vars (authenticated API)
+- **Routes**: GET/PUT /api/warrior/config | GET /api/warrior/status | GET /api/warrior/balance
+- **Webhook**: warrior_continue:YES|NO callback handled in Telegram webhook
 
 ## Stack
 
