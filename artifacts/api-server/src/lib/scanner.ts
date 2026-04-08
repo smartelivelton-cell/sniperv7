@@ -96,18 +96,19 @@ function confluenceScore(mt: MultiTrend, dir: Direction): number {
 }
 
 const STRAT_EMOJI: Record<string, string> = {
-  "Muralha 200":       "🏰",
-  "Muralha Buffer":    "🏰",
-  "Muralha + SAR":     "🏰",
-  "Surfe 200":         "🌊",
-  "Onda SAR":          "📡",
-  "Pré-Gatilho SAR":   "📡",
-  "GPS Full + SAR":    "🎯",
-  "Fibonacci 50%":     "📐",
-  "Exaustão Sniper":   "🎯",
-  "Fênix Reversão":    "🔥",
-  "Confirmação 100%":  "💯",
-  "Movimento de Força":"⚡",
+  "Muralha 200":        "🏰",
+  "Muralha Buffer":     "🏰",
+  "Muralha + SAR":      "🏰",
+  "Surfe 200":          "🌊",
+  "Onda SAR":           "📡",
+  "Pré-Gatilho SAR":    "📡",
+  "GPS Full + SAR":     "🎯",
+  "Fibonacci 50%":      "📐",
+  "Exaustão Sniper":    "🎯",
+  "Fênix Reversão":     "🔥",
+  "Confirmação 100%":   "💯",
+  "Movimento de Força": "⚡",
+  "Estouro da Muralha": "💥",
   "SINAL MESTRE":      "🚀",
 };
 
@@ -652,6 +653,45 @@ async function scanCoin(symbol: string): Promise<void> {
       }
     }
 
+    // ── Estouro da Muralha: condições base (2-velas EMA200 + SAR) ────────────
+    // Candle 1: a vela N-2 estava abaixo/acima da EMA200 e a vela N-1 FECHOU do outro lado
+    // SAR: confirmado como Long/Short na vela atual (N)
+    // Candle 2: preço atual rompeu o máx/mín da Candle 1 + Delta comprador/vendedor > 53%
+    const prevPrevClose  = closes[last - 2] ?? NaN;
+    const prevPrevEma200 = ema200arr[last - 2] ?? NaN;
+    const estouroCond1Long  = Number.isFinite(prevPrevClose) && prevPrevClose <= prevPrevEma200
+      && prevClose > prevEma200 && currSar?.isLong === true;
+    const estouroCond1Short = Number.isFinite(prevPrevClose) && prevPrevClose >= prevPrevEma200
+      && prevClose < prevEma200 && currSar?.isLong === false;
+
+    // Candle 1 detectada, C2 ainda não rompeu → Antecipação
+    if (estouroCond1Long && price <= prevCandle.high) {
+      const antKey = `${symbol}-LONG-estouro-c1`;
+      const lastAnt = anticipationMap.get(antKey) ?? 0;
+      if (Date.now() - lastAnt >= ANT_COOLDOWN_MS) {
+        anticipationMap.set(antKey, Date.now());
+        logger.info({ symbol }, "Scanner: Estouro da Muralha — Candle 1 LONG detectada");
+        await sendTg(buildAnticipationMsg(symbol, "LONG", "Estouro da Muralha", price,
+          `💥 CANDLE 1 CONFIRMADA! EMA200 rompida (${fmt(prevClose)} > EMA200 ${fmt(prevEma200)}) · SAR inverteu ▲ · Aguardando C2: preço > <b>${fmt(prevCandle.high)}</b> + Delta comprador > 53%`,
+          bullCount
+        ));
+        notifySignalSent();
+      }
+    }
+    if (estouroCond1Short && price >= prevCandle.low) {
+      const antKey = `${symbol}-SHORT-estouro-c1`;
+      const lastAnt = anticipationMap.get(antKey) ?? 0;
+      if (Date.now() - lastAnt >= ANT_COOLDOWN_MS) {
+        anticipationMap.set(antKey, Date.now());
+        logger.info({ symbol }, "Scanner: Estouro da Muralha — Candle 1 SHORT detectada");
+        await sendTg(buildAnticipationMsg(symbol, "SHORT", "Estouro da Muralha", price,
+          `💥 CANDLE 1 CONFIRMADA! EMA200 rompida (${fmt(prevClose)} < EMA200 ${fmt(prevEma200)}) · SAR inverteu ▼ · Aguardando C2: preço < <b>${fmt(prevCandle.low)}</b> + Delta vendedor > 53%`,
+          bearCount
+        ));
+        notifySignalSent();
+      }
+    }
+
     // ── Collect raw signals ──────────────────────────────────────────────────
     type Raw = { direction: Direction; strategy: string; leverage: number; reason: string };
     const rawSignals: Raw[] = [];
@@ -775,6 +815,22 @@ async function scanCoin(symbol: string): Promise<void> {
       rawSignals.push({ direction: vtDir, strategy: "Confirmação 100%", leverage: 50, reason: vtReason });
     }
     prevM5RsiMap.set(symbol, m5RsiLast);
+
+    // 9 — Estouro da Muralha (padrão 2-velas: EMA200 + SAR + Delta)
+    // Candle 1: vela anterior fechou acima/abaixo da EMA200 após vir do lado oposto; SAR confirmado
+    // Candle 2: preço atual rompe o máx/mín da Candle 1 com pressão compradora/vendedora > 53%
+    const candleDeltaBuy  = (lastCandle.high - lastCandle.low) > 0
+      ? (lastCandle.close - lastCandle.low)  / (lastCandle.high - lastCandle.low) : 0;
+    const candleDeltaSell = (lastCandle.high - lastCandle.low) > 0
+      ? (lastCandle.high - lastCandle.close) / (lastCandle.high - lastCandle.low) : 0;
+
+    if (estouroCond1Long && price > prevCandle.high && candleDeltaBuy > 0.53)
+      rawSignals.push({ direction: "LONG", strategy: "Estouro da Muralha", leverage: 50,
+        reason: `💥 ESTOURO! C1 fechou na Muralha (${fmt(prevClose)}) · SAR ▲ · C2 (${fmt(price)}) > máx C1 (${fmt(prevCandle.high)}) · Delta comprador: ${(candleDeltaBuy * 100).toFixed(0)}%` });
+
+    if (estouroCond1Short && price < prevCandle.low && candleDeltaSell > 0.53)
+      rawSignals.push({ direction: "SHORT", strategy: "Estouro da Muralha", leverage: 50,
+        reason: `💥 ESTOURO! C1 fechou na Muralha (${fmt(prevClose)}) · SAR ▼ · C2 (${fmt(price)}) < mín C1 (${fmt(prevCandle.low)}) · Delta vendedor: ${(candleDeltaSell * 100).toFixed(0)}%` });
 
     // ── Antecipação 80% GPS (no raw signals path) ────────────────────────────
     if (rawSignals.length === 0) {
