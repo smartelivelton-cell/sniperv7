@@ -387,7 +387,7 @@ export function AutomationPanel() {
       <div className="bg-card border border-border rounded-xl p-3">
         <span className="text-xs font-bold text-muted-foreground uppercase tracking-wide block mb-2">Parâmetros THE WARRIOR</span>
         <div className="space-y-1 text-xs">
-          <div className="flex justify-between"><span className="text-muted-foreground">Ativos</span><span className="font-bold text-foreground">BTC · ETH · SOL</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Ativos</span><span className="font-bold text-foreground">BTC · ETH · SOL · XRP · ADA · BNB · POL</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Timeframe</span><span className="font-bold text-foreground">M5</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 1 — VWAP</span><span className="font-bold text-foreground">LONG acima · SHORT abaixo</span></div>
           <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 2 — RSI(2)</span><span className="font-bold text-foreground">{'<'}10 LONG · {'>'}90 SHORT</span></div>
