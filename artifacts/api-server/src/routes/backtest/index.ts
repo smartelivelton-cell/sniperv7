@@ -389,6 +389,150 @@ router.get("/suntzu", async (req, res) => {
   }
 });
 
+// ── Warrior M15 Backtest (90 dias) ────────────────────────────────────────────
+// Lógica: EMA200 lado + RSI(2) < 10 (LONG) ou > 90 (SHORT)
+// TP = +0.60%, SL = 0.30% — parâmetros exatos do Warrior ao vivo
+const W_BAR    = "15m";
+const W_DAYS   = 90;
+const W_WARMUP = 205;
+const W_TP     = 0.006;
+const W_SL     = 0.003;
+
+async function fetchM15Candles(instId: string): Promise<Candle[]> {
+  const needed = W_DAYS * 96 + W_WARMUP; // ~8845
+  const allRaw: Candle[] = [];
+  let after: string | undefined;
+  let useHistory = false;
+
+  for (let page = 0; page < 32 && allRaw.length < needed; page++) {
+    const params = new URLSearchParams({ instId, bar: W_BAR, limit: "300" });
+    if (after) params.set("after", after);
+    const url = useHistory
+      ? `${OKX_BASE}/market/history-candles?${params}`
+      : `${OKX_BASE}/market/candles?${params}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(15_000) });
+    if (!res.ok) throw new Error(`OKX HTTP ${res.status} for ${instId} M15`);
+    const json = await res.json() as { code: string; data: string[][] };
+    if (json.code !== "0" || !json.data?.length) break;
+    const batch: Candle[] = [...json.data].reverse().map(k => ({
+      openTime: parseInt(k[0]), open: parseFloat(k[1]), high: parseFloat(k[2]),
+      low: parseFloat(k[3]), close: parseFloat(k[4]), volume: parseFloat(k[5]),
+    }));
+    allRaw.unshift(...batch);
+    after = json.data[json.data.length - 1][0];
+    useHistory = true;
+    if (batch.length < 300) break;
+    await new Promise(r => setTimeout(r, 250));
+  }
+  return allRaw.sort((a, b) => a.openTime - b.openTime);
+}
+
+async function runWarriorBacktest(symbol: string): Promise<BacktestResult> {
+  const instId  = `${symbol}-USDT-SWAP`;
+  const candles = await fetchM15Candles(instId);
+  if (candles.length < W_WARMUP + 50) throw new Error(`Dados insuficientes: ${candles.length} velas M15`);
+
+  const cutoff    = Date.now() - W_DAYS * 24 * 60 * 60 * 1000;
+  const firstIdx  = candles.findIndex(c => c.openTime >= cutoff);
+  const warmupIdx = Math.max(0, firstIdx - W_WARMUP);
+  const dataset   = candles.slice(warmupIdx);
+
+  const closes = dataset.map(c => c.close);
+  const ema200 = calculateEMA(closes, 200);
+  const rsi2   = calculateRSI(closes, 2);
+
+  const hourRaw: Record<number, { wins: number; losses: number }> = {};
+  let wins = 0, losses = 0, skipped = 0, accumulatedProfitPct = 0;
+  const startIdx = Math.max(W_WARMUP, firstIdx - warmupIdx);
+  let lastEntry = -999;
+
+  for (let i = startIdx; i < dataset.length - 12; i++) {
+    if (i - lastEntry < 4) continue; // cooldown de 4 velas entre entradas
+    const price = dataset[i].close;
+    const e200  = ema200[i];
+    const rsi   = rsi2[i];
+    if (!e200 || rsi === undefined || rsi === null) continue;
+
+    let direction: "LONG" | "SHORT" | null = null;
+    if (rsi < 10 && price > e200)       direction = "LONG";
+    else if (rsi > 90 && price < e200)  direction = "SHORT";
+    if (!direction) continue;
+
+    const entry = price;
+    const tp = direction === "LONG" ? entry * (1 + W_TP) : entry * (1 - W_TP);
+    const sl = direction === "LONG" ? entry * (1 - W_SL) : entry * (1 + W_SL);
+
+    let outcome: "win" | "loss" | null = null;
+    for (let j = i + 1; j <= Math.min(i + 16, dataset.length - 1); j++) {
+      const f = dataset[j];
+      if (direction === "LONG") {
+        if (f.high >= tp) { outcome = "win";  break; }
+        if (f.low  <= sl) { outcome = "loss"; break; }
+      } else {
+        if (f.low  <= tp) { outcome = "win";  break; }
+        if (f.high >= sl) { outcome = "loss"; break; }
+      }
+    }
+    if (!outcome) { skipped++; continue; }
+
+    lastEntry = i;
+    const hr = hourBR(dataset[i].openTime);
+    if (!hourRaw[hr]) hourRaw[hr] = { wins: 0, losses: 0 };
+    if (outcome === "win") {
+      wins++; hourRaw[hr].wins++;
+      accumulatedProfitPct += W_TP * 100;
+    } else {
+      losses++; hourRaw[hr].losses++;
+      accumulatedProfitPct -= W_SL * 100;
+    }
+  }
+
+  const totalSignals = wins + losses;
+  const winRate      = totalSignals > 0 ? (wins / totalSignals) * 100 : 0;
+
+  const hourStats: Record<number, HourStat> = {};
+  for (const [h, { wins: w, losses: l }] of Object.entries(hourRaw)) {
+    const total = w + l;
+    hourStats[parseInt(h)] = { wins: w, losses: l, signals: total,
+      winRate: total > 0 ? Math.round((w / total) * 1000) / 10 : 0 };
+  }
+  const lowAssertivityHours = Object.entries(hourStats)
+    .filter(([, s]) => s.signals >= 3 && s.winRate < 50)
+    .map(([h]) => parseInt(h));
+  const daysAnalyzed = Math.round(
+    (dataset[dataset.length - 1].openTime - dataset[startIdx]?.openTime) / (24 * 60 * 60 * 1000),
+  );
+
+  return {
+    symbol, bar: W_BAR, totalSignals, wins, losses, skipped,
+    winRate:              Math.round(winRate * 10) / 10,
+    accumulatedProfitPct: Math.round(accumulatedProfitPct * 10) / 10,
+    avgRR:                W_TP / W_SL,
+    hourStats, lowAssertivityHours,
+    lastUpdated: new Date().toLocaleString("pt-BR", { timeZone: TZ }),
+    dataPoints: candles.length, daysAnalyzed,
+  };
+}
+
+const warriorBtCache = new Map<string, { result: BacktestResult; ts: number }>();
+
+router.get("/warrior", async (req, res) => {
+  const symbol = (typeof req.query.symbol === "string" ? req.query.symbol : "BTC").toUpperCase();
+  const cached = warriorBtCache.get(symbol);
+  if (cached && Date.now() - cached.ts < CACHE_TTL) {
+    return res.json({ ok: true, data: cached.result, cached: true });
+  }
+  try {
+    const result = await runWarriorBacktest(symbol);
+    warriorBtCache.set(symbol, { result, ts: Date.now() });
+    logger.info({ symbol, winRate: result.winRate, signals: result.totalSignals, days: result.daysAnalyzed }, "Warrior backtest completed");
+    return res.json({ ok: true, data: result, cached: false });
+  } catch (err: any) {
+    logger.error({ err: err.message }, "Warrior backtest failed");
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // ── Background warm-up: run BTC on server start ────────────────────────────────
 export function warmUpBacktest(): void {
   const SYMBOLS = ["BTC", "ETH", "SOL"];

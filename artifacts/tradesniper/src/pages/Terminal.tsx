@@ -4,6 +4,7 @@ import { TradingViewWidget } from '@/components/charts/TradingViewWidget';
 import { ImageUploader } from '@/components/analysis/ImageUploader';
 import { AnalysisResultPanel } from '@/components/analysis/AnalysisResultPanel';
 import { AutomationPanel } from '@/components/automation/AutomationPanel';
+import { WarriorStatsPanel } from '@/components/automation/WarriorStatsPanel';
 import { GoalsTracker } from '@/components/calculator/GoalsTracker';
 import { CopilotSidebar } from '@/components/copilot/CopilotSidebar';
 import { TradeHistory } from '@/components/trades/TradeHistory';
@@ -175,11 +176,16 @@ export default function Terminal() {
 
       {/* ── ABA 4: THE WARRIOR — AUTOMAÇÃO ── */}
       <div className={cn("flex-1 flex flex-col sm:flex-row overflow-hidden p-1.5 sm:p-2 gap-2", activeTab !== 'warrior' && "hidden")}>
-        <div className="w-full sm:w-[60%] overflow-hidden flex flex-col">
+        <div className="w-full sm:w-[55%] overflow-hidden flex flex-col">
           <AutomationPanel />
         </div>
-        <div className="w-full sm:w-[40%] overflow-y-auto">
-          <GoalsTracker />
+        <div className="w-full sm:w-[45%] overflow-hidden flex flex-col gap-2">
+          <div className="flex-1 overflow-hidden rounded-xl border border-border bg-card">
+            <WarriorStatsPanel />
+          </div>
+          <div className="shrink-0">
+            <GoalsTracker />
+          </div>
         </div>
       </div>
 
