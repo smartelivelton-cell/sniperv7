@@ -27,16 +27,17 @@ function ev(winRate: number) {
 
 // ─── Estratégias (dados dos backtests 365 dias) ───────────────────────────────
 const STRATEGIES = [
-  { id: 'warrior_live', name: '🛡️ Warrior',     wr: null, signals: null, live: true },
-  { id: 'breakeven',   name: '⚡ Break-Even',   wr: 78,  signals: 142 },
-  { id: 'sniper',      name: '🎯 Sniper RSI',   wr: 74,  signals: 211 },
-  { id: 'muralha',     name: '🏰 Muralha 200',  wr: 72,  signals: 187 },
-  { id: 'suntzu',      name: '🏮 Sun Tzu',      wr: 71,  signals: 89  },
-  { id: 'fibonacci',   name: '📐 Fibonacci 50%',wr: 69,  signals: 158 },
-  { id: 'sar',         name: '📡 Onda SAR',     wr: 65,  signals: 176 },
-  { id: 'surfe',       name: '🌊 Surfe 200',    wr: 63,  signals: 243 },
-  { id: 'fenix',       name: '🔥 Fênix',        wr: 58,  signals: 96  },
-] as { id: string; name: string; wr: number | null; signals: number | null; live?: boolean }[];
+  { id: 'warrior_live',       name: '🛡️ Warrior',             wr: null, signals: null, live: true },
+  { id: 'confluencia_sniper', name: '🎯 Confluência Sniper',  wr: 76,  signals: 93,   highlight: true },
+  { id: 'breakeven',          name: '⚡ Break-Even',           wr: 78,  signals: 142 },
+  { id: 'sniper',             name: '🎯 Sniper RSI',           wr: 74,  signals: 211 },
+  { id: 'muralha',            name: '🏰 Muralha 200',          wr: 72,  signals: 187 },
+  { id: 'suntzu',             name: '🏮 Sun Tzu',              wr: 71,  signals: 89  },
+  { id: 'fibonacci',          name: '📐 Fibonacci 50%',        wr: 69,  signals: 158 },
+  { id: 'sar',                name: '📡 Onda SAR',             wr: 65,  signals: 176 },
+  { id: 'surfe',              name: '🌊 Surfe 200',            wr: 63,  signals: 243 },
+  { id: 'fenix',              name: '🔥 Fênix',                wr: 58,  signals: 96  },
+] as { id: string; name: string; wr: number | null; signals: number | null; live?: boolean; highlight?: boolean }[];
 
 // ─── Tipos da API ─────────────────────────────────────────────────────────────
 interface HourStat { wins: number; losses: number; winRate: number; signals: number }
@@ -300,7 +301,9 @@ function RankingTab({ warriorWr }: { warriorWr: number | null }) {
             {rows.map((s, idx) => (
               <tr key={s.id}
                 className={cn("border-b border-border/40 transition-colors",
-                  s.live ? "bg-blue-500/5" : "hover:bg-secondary/20"
+                  s.live      ? "bg-blue-500/5"   :
+                  s.highlight ? "bg-yellow-500/5 border-l-2 border-l-yellow-500/40" :
+                  "hover:bg-secondary/20"
                 )}>
                 <td className="py-2 px-1">
                   {idx === 0 && <Trophy className="w-3 h-3 text-yellow-400" />}

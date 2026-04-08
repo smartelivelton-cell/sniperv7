@@ -5,6 +5,7 @@ import { startScanner } from "./lib/scanner";
 import { startTankScanner } from "./lib/tankScanner";
 import { startSunTzuScanner } from "./lib/sunTzuScanner";
 import { startWarriorScanner } from "./lib/warriorScanner";
+import { startSniperScanner } from "./lib/sniperConfluencia";
 import { startOKXTimeSync } from "./lib/okxTime";
 import { warmUpBacktest } from "./routes/backtest/index";
 
@@ -64,6 +65,7 @@ app.listen(port, (err) => {
   startTankScanner();
   startSunTzuScanner();
   startWarriorScanner();
+  startSniperScanner();
   warmUpBacktest();
   setupTelegramWebhook().catch(err => logger.warn({ err: err.message }, "Webhook: setup error"));
 });

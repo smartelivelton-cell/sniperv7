@@ -1,18 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
-import { Shield, ShieldCheck, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown, Zap } from 'lucide-react';
+import { Shield, ShieldCheck, RefreshCw, AlertCircle, CheckCircle2, XCircle, Clock, TrendingUp, TrendingDown, Zap, Crosshair } from 'lucide-react';
 
 const BASE = (import.meta.env.BASE_URL ?? '').replace(/\/$/, '');
 
 const STRATEGIES = [
-  { id: 'warrior',     label: '🛡️ THE WARRIOR',    desc: 'VWAP + RSI(2) + SAR' },
-  { id: 'muralha',     label: '🏰 Muralha 200',     desc: 'EMA200 suporte/resist.' },
-  { id: 'surfe',       label: '🌊 Surfe 200',        desc: 'Breakout da EMA200' },
-  { id: 'ondaSar',     label: '📡 Onda SAR',         desc: 'Trend following SAR' },
-  { id: 'sinalMestre', label: '🚀 Sinal Mestre',     desc: 'Multi-confluência' },
-  { id: 'fenix',       label: '🔥 Fênix Reversão',  desc: 'Mean reversion' },
-  { id: 'tank',        label: '⚔️ Tank Scanner',     desc: 'Liquidez P50 + absorção' },
-  { id: 'sunTzu',      label: '🧠 Sun Tzu',          desc: 'Vencer sem lutar' },
+  { id: 'warrior',           label: '🛡️ THE WARRIOR',         desc: 'VWAP + RSI(2) + SAR' },
+  { id: 'confluenciaSniper', label: '🎯 CONFLUÊNCIA SNIPER',  desc: 'Conf.100% + Fib + SAR' },
+  { id: 'muralha',           label: '🏰 Muralha 200',          desc: 'EMA200 suporte/resist.' },
+  { id: 'surfe',             label: '🌊 Surfe 200',             desc: 'Breakout da EMA200' },
+  { id: 'ondaSar',           label: '📡 Onda SAR',              desc: 'Trend following SAR' },
+  { id: 'sinalMestre',       label: '🚀 Sinal Mestre',          desc: 'Multi-confluência' },
+  { id: 'fenix',             label: '🔥 Fênix Reversão',       desc: 'Mean reversion' },
+  { id: 'tank',              label: '⚔️ Tank Scanner',          desc: 'Liquidez P50 + absorção' },
+  { id: 'sunTzu',            label: '🧠 Sun Tzu',               desc: 'Vencer sem lutar' },
 ];
 
 interface WarriorConfig {
@@ -45,21 +46,40 @@ interface OkxBalance {
   balance:    { available: number; equity: number; currency: string } | null;
 }
 
+interface SniperEscort {
+  symbol:          string;
+  direction:       string;
+  entry:           number;
+  sl:              number;
+  tp:              number;
+  breakevenMoved:  boolean;
+  trailingActive:  boolean;
+  startedAt:       number;
+  fibLevel:        number;
+  confluenceScore: number;
+}
+
+interface SniperStatus {
+  autoEnabled:   boolean;
+  activeEscorts: SniperEscort[];
+}
+
 function fmt(n: number) { return n > 1 ? n.toFixed(2) : n.toFixed(6); }
 
 export function AutomationPanel() {
-  const [config, setConfig]   = useState<WarriorConfig>({
+  const [config, setConfig]         = useState<WarriorConfig>({
     autoEnabled: false,
     banca: 200,
     leverage: 50,
     dailyGoal: 50,
     enabledStrats: ['warrior', 'muralha', 'surfe', 'ondaSar', 'sinalMestre'],
   });
-  const [status, setStatus]   = useState<WarriorStatus | null>(null);
-  const [balance, setBalance] = useState<OkxBalance | null>(null);
-  const [saving, setSaving]   = useState(false);
+  const [status, setStatus]         = useState<WarriorStatus | null>(null);
+  const [sniperStatus, setSniperStatus] = useState<SniperStatus | null>(null);
+  const [balance, setBalance]       = useState<OkxBalance | null>(null);
+  const [saving, setSaving]         = useState(false);
   const [balanceLoading, setBalanceLoading] = useState(false);
-  const [saved, setSaved]     = useState(false);
+  const [saved, setSaved]           = useState(false);
 
   const fetchConfig = useCallback(async () => {
     try {
@@ -70,8 +90,12 @@ export function AutomationPanel() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`${BASE}/api/warrior/status`);
-      if (res.ok) setStatus(await res.json());
+      const [wRes, sRes] = await Promise.all([
+        fetch(`${BASE}/api/warrior/status`),
+        fetch(`${BASE}/api/sniper/status`),
+      ]);
+      if (wRes.ok) setStatus(await wRes.json());
+      if (sRes.ok) setSniperStatus(await sRes.json());
     } catch { /* ignore */ }
   }, []);
 
@@ -93,6 +117,18 @@ export function AutomationPanel() {
     return () => clearInterval(interval);
   }, [fetchConfig, fetchStatus, fetchBalance]);
 
+  // Sync Sniper autoEnabled with the strategy toggle + overall enable
+  const syncSniperConfig = async (updated: WarriorConfig) => {
+    const sniperOn = updated.autoEnabled && updated.enabledStrats.includes('confluenciaSniper');
+    try {
+      await fetch(`${BASE}/api/sniper/config`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ autoEnabled: sniperOn }),
+      });
+    } catch { /* ignore */ }
+  };
+
   const saveConfig = async (updated: WarriorConfig) => {
     setSaving(true);
     try {
@@ -107,6 +143,7 @@ export function AutomationPanel() {
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       }
+      await syncSniperConfig(updated);
     } catch { /* ignore */ } finally {
       setSaving(false);
     }
@@ -378,10 +415,98 @@ export function AutomationPanel() {
           )}
 
           {status.activeEscorts.length === 0 && status.pendingBreakouts.length === 0 && (
-            <p className="text-xs text-muted-foreground text-center py-1">Nenhuma operação ativa — scanner monitorando BTC, ETH, SOL</p>
+            <p className="text-xs text-muted-foreground text-center py-1">Nenhuma operação ativa — scanner monitorando BTC · ETH · SOL · XRP · ADA · BNB · POL</p>
           )}
         </div>
       )}
+
+      {/* ── CONFLUÊNCIA SNIPER Live Status ── */}
+      {sniperStatus && (
+        <div className="bg-card border border-yellow-500/30 rounded-xl p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1.5">
+              <Crosshair className="w-4 h-4 text-yellow-400" />
+              <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide">Confluência Sniper</span>
+            </div>
+            <span className={cn(
+              "text-[10px] font-bold px-2 py-0.5 rounded-full",
+              sniperStatus.autoEnabled
+                ? "bg-yellow-500/20 text-yellow-400"
+                : "bg-secondary text-muted-foreground",
+            )}>
+              {sniperStatus.autoEnabled ? "● ATIVO" : "○ INATIVO"}
+            </span>
+          </div>
+
+          {/* Active sniper escorts */}
+          {sniperStatus.activeEscorts.length > 0 ? (
+            <div className="space-y-1.5">
+              {sniperStatus.activeEscorts.map(e => {
+                const durMin = Math.floor((Date.now() - e.startedAt) / 60000);
+                return (
+                  <div key={e.symbol} className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-2.5 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-foreground">🎯 {e.symbol}-USDT</span>
+                      <div className="flex items-center gap-1">
+                        {e.direction === 'LONG'
+                          ? <TrendingUp className="w-3.5 h-3.5 text-green-400" />
+                          : <TrendingDown className="w-3.5 h-3.5 text-red-400" />}
+                        <span className={e.direction === 'LONG' ? 'text-green-400 font-bold' : 'text-red-400 font-bold'}>
+                          {e.direction}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-1 text-[10px] text-muted-foreground">
+                      <span>Entrada: <b className="text-foreground">{fmt(e.entry)}</b></span>
+                      <span>TP: <b className="text-green-400">{fmt(e.tp)}</b></span>
+                      <span>SL: <b className="text-red-400">{fmt(e.sl)}</b></span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-1">
+                      Fib: <b className="text-yellow-400">{fmt(e.fibLevel)}</b> · Score: {e.confluenceScore}/4
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 text-[10px]">
+                      {e.breakevenMoved && (
+                        <span className="bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded-full">✅ Breakeven</span>
+                      )}
+                      {e.trailingActive && (
+                        <span className="bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded-full">🔄 Trailing</span>
+                      )}
+                      <span className="text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" />{durMin}min
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground text-center py-1">
+              {sniperStatus.autoEnabled
+                ? "Aguardando confluência de 4 filtros simultâneos…"
+                : "Ativar estratégia 🎯 + botão principal para habilitar"}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ── Sniper params summary ── */}
+      <div className="bg-card border border-yellow-500/20 rounded-xl p-3">
+        <span className="text-xs font-bold text-yellow-400 uppercase tracking-wide block mb-2">🎯 Parâmetros CONFLUÊNCIA SNIPER</span>
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between"><span className="text-muted-foreground">Ativos</span><span className="font-bold text-foreground">BTC · ETH · SOL · XRP · ADA · BNB · POL</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Timeframe</span><span className="font-bold text-foreground">M5</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 1 — Conf. 100%</span><span className="font-bold text-foreground">RSI(6) spike ≥15pts OU Vol ≥2× média</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 2 — Sniper RSI(2)</span><span className="font-bold text-foreground">{'<'}10 LONG · {'>'}90 SHORT</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 3 — Fibonacci</span><span className="font-bold text-foreground">Preço ±0.3% do nível 0.5 / 0.618</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Gatilho 4 — SAR</span><span className="font-bold text-foreground">SAR a favor da tendência</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Alavancagem fixa</span><span className="font-bold text-foreground">50x (Margem Isolada)</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Take Profit</span><span className="font-bold text-green-400">+0.6%</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Stop Loss</span><span className="font-bold text-red-400">-0.3%</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Sombra do General</span><span className="font-bold text-yellow-400">Breakeven em +0.25%</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Trailing Stop</span><span className="font-bold text-blue-400">Delta {'<'} 45% → ativa trailing</span></div>
+          <div className="flex justify-between"><span className="text-muted-foreground">Monitor SAR</span><span className="font-bold text-foreground">A cada 2 minutos</span></div>
+        </div>
+      </div>
 
       {/* ── Warrior params summary ── */}
       <div className="bg-card border border-border rounded-xl p-3">
