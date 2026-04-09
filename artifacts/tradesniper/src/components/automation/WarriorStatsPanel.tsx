@@ -29,6 +29,7 @@ function ev(winRate: number) {
 const STRATEGIES = [
   { id: 'warrior_live',       name: '🛡️ Warrior',             wr: null, signals: null, live: true },
   { id: 'confluencia_sniper', name: '🎯 Confluência Sniper',  wr: 76,  signals: 93,   highlight: true },
+  { id: 'tanque_guerra',      name: '🚜 Tanque de Guerra',    wr: 70,  signals: 67,   highlight: true },
   { id: 'breakeven',          name: '⚡ Break-Even',           wr: 78,  signals: 142 },
   { id: 'sniper',             name: '🎯 Sniper RSI',           wr: 74,  signals: 211 },
   { id: 'muralha',            name: '🏰 Muralha 200',          wr: 72,  signals: 187 },
