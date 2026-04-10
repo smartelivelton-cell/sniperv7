@@ -1,0 +1,5 @@
+ccxt
+pandas
+python-telegram-bot
+numpy
+flask
